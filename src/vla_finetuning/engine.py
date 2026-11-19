@@ -153,6 +153,32 @@ def execute_command(plan, cfg, *, apply=False, confirmed_idle=False, runner=None
                                   "PLAN_ONLY_REQUIRES_SIM_COMPATIBILITY_SMOKE"):
         raise ContractError("Cannot execute unsupported plan")
     project_root = require_directory(cfg["paths"]["project_root"], name="project root")
+    # Pinned checkout is mandatory at execution time, not just a text SHA in JSON.
+    lerobot_checkout = project_root / "vendor" / ("lerobot-" + cfg["software"]["lerobot_sha"])
+    verify_checkout(lerobot_checkout, cfg["software"]["lerobot_sha"])
+    if plan["status"] == "PLAN_ONLY_REQUIRES_SIM_COMPATIBILITY_SMOKE":
+        fork = project_root / "vendor" / ("LIBERO-plus-" + cfg["software"]["libero_plus_sha"])
+        fork = require_directory(fork, name="LIBERO-plus checkout")
+        actual = subprocess.check_output(
+            ["git", "-C", str(fork), "rev-parse", "HEAD"], text=True, timeout=5
+        ).strip()
+        if actual != cfg["software"]["libero_plus_sha"]:
+            raise ContractError("LIBERO-plus simulator checkout SHA drift")
+    for folder, kind, repo_key, revision in (
+        (cfg["model"]["local_dir"], "model", cfg["model"]["repo_id"], cfg["model"]["revision"]),
+        (cfg["dataset"]["local_dir"], "dataset_payload",
+         cfg["dataset"]["repo_id"], cfg["dataset"]["revision"]),
+    ):
+        receipt = Path(folder) / (".vla_receipt_" + kind + ".json")
+        if not receipt.is_file():
+            raise ContractError("Missing pinned snapshot download receipt: " + str(receipt))
+        meta = read_json(receipt)
+        if meta.get("kind") != kind or meta.get("repo_id") != repo_key or meta.get("revision") != revision:
+            raise ContractError("Snapshot source/revision mismatch: " + str(receipt))
+        for rel, expected in meta.get("files", {}).items():
+            local_file = Path(folder) / rel
+            if not local_file.is_file() or local_file.stat().st_size != expected.get("size"):
+                raise ContractError("Downloaded snapshot file missing or changed: " + rel)
     dest = Path(plan["argv"][-1].split("=", 1)[1])
     require_unused_output(dest)
     require_disk(dest, free_gib=max(30, cfg["paths"]["min_free_gib"]))
