@@ -73,6 +73,14 @@ def parser():
     s.add_argument("--checkpoint", type=Path, required=True)
     add_output(s)
 
+    s = sub.add_parser("merge-eval", help="Convert two official LeRobot eval_info.json files into paired CSV")
+    s.add_argument("--baseline-info", type=Path, required=True)
+    s.add_argument("--candidate-info", type=Path, required=True)
+    s.add_argument("--baseline", default="B0")
+    s.add_argument("--candidate", default="L1")
+    s.add_argument("--start-seed", type=int, required=True)
+    s.add_argument("--out", type=Path, required=True)
+
     s = sub.add_parser("report", help="Analyze real paired evaluation CSV and refuse mismatches")
     s.add_argument("--csv", type=Path, required=True)
     s.add_argument("--baseline", default="B0")
@@ -136,6 +144,14 @@ def main(argv=None):
         elif a.operation == "checkpoint-audit":
             from .engine import checkpoint_inventory
             result = checkpoint_inventory(a.checkpoint)
+        elif a.operation == "merge-eval":
+            from .eval_extract import merge_official_eval, save_csv_new
+            rows = merge_official_eval(a.baseline_info, a.candidate_info,
+                                       baseline=a.baseline, candidate=a.candidate,
+                                       start_seed=a.start_seed)
+            result = save_csv_new(a.out, rows)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return
         elif a.operation == "report":
             from .reports import analyze_results
             result = analyze_results(a.csv, baseline=a.baseline, candidate=a.candidate)

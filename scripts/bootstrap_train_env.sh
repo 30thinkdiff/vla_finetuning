@@ -13,7 +13,7 @@ if [[ "$#" -ne 1 || "$1" != "--apply" ]]; then
   echo "DRY RUN: after checking CPU/GPU/network/disk run VLA_APPROVED_CPU_IO=YES bash scripts/bootstrap_train_env.sh --apply"
   exit 0
 fi
-[[ "$VLA_APPROVED_CPU_IO" == "YES" ]] || { echo "STOP: missing explicit CPU/IO approval"; exit 2; }
+[[ "$(printenv VLA_APPROVED_CPU_IO 2>/dev/null || true)" == "YES" ]] || { echo "STOP: missing explicit CPU/IO approval"; exit 2; }
 [[ -d "$ROOT" && -d "/root/autodl-tmp" ]] || { echo "STOP: missing persistent data disk"; exit 2; }
 avail="$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')"
 [[ "$avail" -ge 52428800 ]] || { echo "STOP: require >=50GiB free"; exit 2; }
