@@ -213,3 +213,31 @@ def checkpoint_inventory(checkpoint):
             "can_resume": has_model and has_train_state,
             "checked_hashes": False, "reloaded_in_real_model": False,
             "note": "File presence alone does not prove model can be loaded or resumed."}
+
+
+def resume_plan(config_path, checkpoint, *, binary="lerobot-train"):
+    """Resume command for a complete saved official LeRobot checkpoint.
+
+    Uses LeRobot's documented --resume=true --config_path=<pretrained_model/train_config.json>.
+    Preview only: actual resume must await real GPU smoke and explicit user approval.
+    """
+    cfg = load_protocol(config_path)
+    root = require_directory(checkpoint, name="complete official checkpoint")
+    policy = root / "pretrained_model"
+    train_state = root / "training_state"
+    saved_cfg = policy / "train_config.json"
+    if not policy.is_dir() or not train_state.is_dir() or not saved_cfg.is_file():
+        raise ContractError("Need pretrained_model/train_config.json AND training_state/")
+    saved = read_json(saved_cfg)
+    if not isinstance(saved, dict):
+        raise ContractError("Official checkpoint train_config.json malformed")
+    if saved.get("output_dir") != cfg["train"]["output_dir"]:
+        raise ContractError("Resume output directory differs from frozen run")
+    old_repo = saved.get("dataset", {}).get("repo_id")
+    if old_repo != cfg["dataset"]["repo_id"]:
+        raise ContractError("Resume dataset identity differs from frozen run")
+    argv = [binary, "--resume=true", f"--config_path={saved_cfg}"]
+    return {"status": "RESUME_PLAN_ONLY_NOT_GPU_VALIDATED",
+            "argv": argv, "display": shell_render(argv),
+            "checkpoint": str(root), "saved_config": str(saved_cfg),
+            "note": "Optimizer/Scheduler/RNG states and actual resume not checked until GPU free."}
