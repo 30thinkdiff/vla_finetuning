@@ -1,6 +1,8 @@
 # VLA Fine-tuning Research — SmolVLA
 
-**状态：2026-11-19 · Phase 0 CPU-only 框架已提交；尚未微调或进行新闭环评测。**
+**状态：2026-11-19 · 已提供完整的预备阶段工程实现与安全门槛；尚未在AutoDL联调真实数据、完整SmolVLA训练或LIBERO-plus闭环。**
+
+本仓库新增了**正式训练/评测编排、独立环境安装、按来源Episode选择v3实际Parquet/视频分片、Pinned模型/数据下载预算、官方Checkpoint续训计划、官方`eval_info.json`到配对CSV、Recovery子集获取脚本与LIBERO-plus资产安全检查**。参见[完整工程使用手册](docs/ENGINEERING_GUIDE.md)。这些代码已用于静态CI测试，但所有涉及依赖或外部资源的操作需要经过真实环境联调才能宣称已运行成功。
 
 这是对已有 [robot-lab](https://github.com/30thinkdiff/robot-lab/tree/feature/robotlab-replay) 的SmolVLA、Corrector研究的独立后续：优先学习和实现**训练数据审计、Flow Matching、LoRA、Checkpoint与闭环实验协议**；研究主线是 **LIBERO-plus视觉适配**，第二阶段再接入**LIBERO-Recovery失败恢复**。
 
@@ -34,6 +36,16 @@ export HF_DATASETS_CACHE=/root/autodl-tmp/vla_finetuning/.cache/huggingface/data
 - 已实现`hf-pin`及`fetch-metadata`：必须明确`--allow-network`，下载**仅限指定的小元数据文件**（默认单文件上限512KiB），不接触模型或训练视频。
 - `exercises/student.py`的三道题专门留给你写：任务身份解析、Episode内Action Chunk/Mask、配对闭环成败统计；测试在`exercises/tests`，未完成时失败属于预期状态，独立于正式CI。
 - `lora-demo`需要可选PyTorch；当前系统Python缺Torch不影响其它功能，**不为此修改Corrector的venv**。
+
+## 已补齐的工程模块与参考实现
+
+- `src/vla_finetuning/pipeline.py`：统一`validate-config/shard-plan/hub-plan/hub-download/train/evaluate/resume-plan/report/merge-eval`入口。**默认只打印计划**。
+- `src/vla_finetuning/dataset_files.py` + `artifacts.py`：从v3原Episode索引筛选真实Shard、检查Hub文件大小与Revision，限额、单线程、显式`--apply`下载。
+- `src/vla_finetuning/engine.py` + `real_batch.py`：官方LeRobot CLI、真实CPU样本与Checkpoint安全检查；实际模型前向仍待独立环境验证。
+- `src/vla_finetuning/reference.py`：三个学生练习函数的完整工程参考实现，附对应单测。
+- `src/vla_finetuning/reports.py` + `eval_extract.py`：读取真实官方评测结果并转为严格配对CSV，统计救回/退化和原始能力表现。
+- `scripts/bootstrap_train_env.sh`、`bootstrap_sim_env.sh`、`download_recovery_subset.py`、`prepare_plus_assets.py`：资源保护的安装/获取/资源审计脚本，默认不下载、不执行。
+- [工程使用手册](docs/ENGINEERING_GUIDE.md)详细说明各阶段CLI、输入输出及尚未通过真实GPU/仿真验证的边界。
 
 ## 立刻可运行（不会调用GPU）
 

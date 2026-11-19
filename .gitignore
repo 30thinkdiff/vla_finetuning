@@ -42,3 +42,9 @@ videos/
 # Local editor
 .vscode/
 .idea/
+
+# Additional isolated environments, vendored external source, assets and temporary output
+.venvs/
+vendor/
+assets/
+report_exports/

@@ -156,3 +156,32 @@ PYTHONPATH=src python -m vla_finetuning.pipeline report \
 | 第二阶段 | LIBERO-Recovery实际示范转换、场景按失败源隔离和针对性恢复微调；不得与第一阶段视角改进混合归因 |
 
 关键风险：Hugging Face/ModelScope SDK、PyTorch/PyAV以及LIBERO-plus版本变化可能影响上游API。固定Revision只是必要条件，不是实际兼容性测试。只有当2号机资源空闲且用户主动进行真实联调，才能把这些部分验收为生产可运行。
+
+## 8. Checkpoint断点续训（只生成命令）
+
+```bash
+PYTHONPATH=src python -m vla_finetuning.pipeline resume-plan \
+  --config configs/your_frozen_run.json \
+  --checkpoint /root/autodl-tmp/vla_finetuning/runs/plus_expert_lora_001/checkpoints/000050 \
+  --binary /root/autodl-tmp/vla_finetuning/.venvs/train/bin/lerobot-train
+```
+
+此处只验证Checkpoint目录存在`pretrained_model/train_config.json`、`training_state/`、相同的训练输出路径与数据集身份，打印`--resume=true --config_path=...`。**暂不自动Resume**；实际优化器、调度器、随机状态恢复是否无损，需要第一次真实GPU训练保存Checkpoint后才能验证。
+
+## 9. 从LeRobot官方结果自动生成成对比较
+
+固定两个策略使用同一注册变体集和种子、相同模拟器revision/初始状态/任务语言与H20执行窗口，待两组评测结束且`eval_info.json`存在时执行：
+
+```bash
+PYTHONPATH=src python -m vla_finetuning.pipeline merge-eval \
+  --baseline-info runs/B0/eval_info.json \
+  --candidate-info runs/L1/eval_info.json \
+  --start-seed 1000 --out runs/paired.csv
+
+PYTHONPATH=src python -m vla_finetuning.pipeline report \
+  --csv runs/paired.csv --out runs/paired_summary.json
+```
+
+这套解析器直接读取固定LeRobot源码的`per_task[].metrics.successes`，根据受控`start_seed`建立注册Variant的成对结果。**它只验证结果记录的数学匹配，不验证两个Rollout的真实物理初始状态完全一致。**数据标签应结合保存的视频和环境Trace核对，不能仅凭CSV发布性能提升结论。
+
+Recovery专家示范还可以在审核远程文件清单及每项`size_bytes`之后，使用`scripts/download_recovery_subset.py --manifest <人工审核清单>`生成下载计划。默认不下载；加`--apply`仍要求GPU无其他计算进程，且ModelScope SDK实际传输字节上限**不属于强制流式配额**，必须由用户先检查后才能执行。
