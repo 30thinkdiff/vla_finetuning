@@ -22,3 +22,4 @@ where = ["src"]
 [project.scripts]
 vla-study = "vla_finetuning.cli:main"
 vla-pipeline = "vla_finetuning.pipeline:main"
+vla-recovery = "vla_finetuning.recovery_cli:main"
