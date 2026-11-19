@@ -99,3 +99,27 @@ PYTHONPATH=src python -m vla_finetuning.recovery_cli plan-eval \
 ```
 
 这会按官方索引的suite×level分桶稳定选择场景、列出方法与预期回合数，但**不会**检查真实BDDL/npy、运行官方随机采样/settle、加载模型或产生真实初始状态SHA。输出`perturbed_state_sha256=null`是故意的：只有实际仿真状态生成以后才能填入。它不是作者默认采样器的等价复现。M0/M1/M2对应的checkpoint依然必须另行固定并审核。
+
+## 已核实：固定LeRobot版本不能直接接收两个repo_id
+
+在固定源码 `huggingface/lerobot@7e241bd630a3719a56157a497ce5d08f244784f1` 中，
+`src/lerobot/configs/default.py` 的 `DatasetConfig.repo_id` 是单个 `str`；
+`src/lerobot/configs/train.py` 的验证代码包含：
+
+```python
+if isinstance(self.dataset.repo_id, list):
+    raise NotImplementedError("LeRobotMultiDataset is not currently implemented.")
+```
+
+因此 `--dataset.repo_id=[Expert,Normal]` **不能运行M2**。可行候选是：（A）把经核实的Expert和普通示教转换成一个版本化、单一LeRobot v3数据集，保存原始来源字段；（B）在固定LeRobot训练器上开发经过独立测试的多源Dataset+Sampler适配。**目前不能假设任一方式已经实现。** 优先A，目的是尽量复用上游单数据集训练、processor与Checkpoint流程。
+
+现增加 `src/vla_finetuning/recovery_merge_plan.py`：它只在真实split和对齐证据、两份v3 `meta/info.json` 存在且维度、FPS、相机键通过审核时，生成重新编号的Episode映射；**不写Parquet/MP4，也不生成可训练数据集**。若Expert仍是v2.1，必须先完成v2→v3的实测转换，不能悄悄修改`codebase_version`。
+
+```bash
+PYTHONPATH=src python -m vla_finetuning.recovery_cli plan-materialization \
+  --split runs/REAL_AUDITED_SPLIT.json \
+  --alignment runs/REAL_ALIGNMENT.json \
+  --out runs/RECOVERY_MIX_MAPPING_001.json
+```
+
+配置草案：`configs/recovery_alignment.template.json`，默认`verified=false`且所有语义证据为TBD，预期STOP。需要实际人工作业确认以后才允许生成上述计划。
