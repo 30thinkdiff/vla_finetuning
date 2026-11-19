@@ -8,6 +8,8 @@ on:
       - "examples/**"
       - "configs/**"
       - "pyproject.toml"
+      - "scripts/**"
+      - "docs/**"
       - ".github/workflows/cpu.yml"
   pull_request:
 
@@ -19,5 +21,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+      - name: Compile source and scripts without importing torch
+        run: python -m compileall -q src scripts tests
+      - name: Check bash syntax (no execution)
+        run: bash -n scripts/bootstrap_train_env.sh scripts/bootstrap_sim_env.sh
       - name: Run without torch, network downloads or GPU
         run: python -m unittest discover -s tests -v
