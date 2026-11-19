@@ -30,6 +30,9 @@ def main(argv=None):
     a.add_argument("--batch-size", type=int, default=1)
     a.add_argument("--seed", type=int, default=42)
     a.add_argument("--recovery-fraction", type=float)
+    a = inp("plan-v21-files")
+    a.add_argument("--dataset-root", type=Path, required=True)
+    a.add_argument("--episodes", required=True, help="Comma-separated nonnegative Episode indices")
     a = inp("plan-materialization")
     a.add_argument("--split", type=Path, required=True)
     a.add_argument("--alignment", type=Path, required=True)
@@ -66,6 +69,13 @@ def main(argv=None):
             result = plan_mixture(args.split, method=args.method, steps=args.steps,
                                   batch_size=args.batch_size, seed=args.seed,
                                   recovery_fraction=args.recovery_fraction)
+        elif args.operation == "plan-v21-files":
+            from .recovery_v21 import plan_v21_expert_files
+            try:
+                indices = [int(x) for x in args.episodes.split(",")]
+            except ValueError as exc:
+                raise ContractError("Expected comma-separated integer Episode IDs") from exc
+            result = plan_v21_expert_files(args.dataset_root, indices)
         elif args.operation == "plan-materialization":
             from .recovery_merge_plan import plan_mixed_v3_dataset
             result = plan_mixed_v3_dataset(args.split, args.alignment)
