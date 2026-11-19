@@ -62,6 +62,15 @@ class SplitTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 split_provenance_csv(p)
 
+
+    def test_unreviewed_source_group_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "source.csv"
+            p.write_text("dataset_id,episode_id,source_group,task_id,source_evidence,review_status\n"
+                         "x,1,group1,soup,unverified, PENDING\n")
+            with self.assertRaises(ContractError):
+                split_provenance_csv(p)
+
     def test_overwrite_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "report.json"
@@ -82,9 +91,9 @@ class PreparationTests(unittest.TestCase):
             root = Path(d)
             manifest = root / "split.json"
             splits = {"splits": {
-                "train": [{"dataset_id": "org/demo", "episode_id": "1", "source_group": "g1"}],
-                "validation": [{"dataset_id": "org/demo", "episode_id": "2", "source_group": "g2"}],
-                "test": [{"dataset_id": "org/demo", "episode_id": "3", "source_group": "g3"}]}}
+                "train": [{"dataset_id": "org/demo", "episode_id": "1", "source_group": "g1", "source_evidence": "asset/scene-a", "review_status": "verified"}],
+                "validation": [{"dataset_id": "org/demo", "episode_id": "2", "source_group": "g2", "source_evidence": "asset/scene-b", "review_status": "verified"}],
+                "test": [{"dataset_id": "org/demo", "episode_id": "3", "source_group": "g3", "source_evidence": "asset/scene-c", "review_status": "verified"}]}}
             manifest.write_text(json.dumps(splits), encoding="utf-8")
             cfg = {
                 "lerobot": {"source_revision": "a" * 40},

@@ -109,7 +109,7 @@ def audit_lerobot_info(info_path):
 def split_provenance_csv(csv_path, seed=42, train_fraction=0.6, val_fraction=0.2):
     """Strict group holdout by source_group, separately within each task.
 
-    Required columns: dataset_id, episode_id, source_group, task_id.
+    Required columns: dataset_id, episode_id, source_group, task_id, source_evidence, review_status.
     Example source_group for new-view renditions: original demonstration identity.
     Example recovery source_group: failure-scene identity. If unknown, STOP:
     silently falling back to episode_id is misleading.
@@ -120,7 +120,7 @@ def split_provenance_csv(csv_path, seed=42, train_fraction=0.6, val_fraction=0.2
     with Path(csv_path).open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         columns = set(reader.fieldnames or ())
-        required = {"dataset_id", "episode_id", "source_group", "task_id"}
+        required = {"dataset_id", "episode_id", "source_group", "task_id", "source_evidence", "review_status"}
         if not required.issubset(columns):
             raise ContractError("Missing required columns: " + str(sorted(required - columns)))
         rows = list(reader)
@@ -133,6 +133,8 @@ def split_provenance_csv(csv_path, seed=42, train_fraction=0.6, val_fraction=0.2
         for key in required:
             if not row[key].strip():
                 raise ContractError("Blank " + key + " in provenance CSV")
+        if row["review_status"].strip().lower() != "verified":
+            raise ContractError("Source group not verified: episode " + row["episode_id"])
         key = (row["dataset_id"], row["episode_id"])
         if key in seen:
             raise ContractError("Repeated dataset_id/episode_id: " + repr(key))
@@ -236,6 +238,11 @@ def training_plan(path):
                     group = row["source_group"].strip()
                     dataset_id = row["dataset_id"].strip()
                     episode_id = int(row["episode_id"])
+                    evidence = row["source_evidence"].strip()
+                    if (row["review_status"].strip().lower() != "verified"
+                        or not evidence or evidence.upper().startswith("SYNTHETIC")
+                        or dataset_id == "synthetic"):
+                        raise ContractError("Missing real, manually reviewed source provenance evidence")
                     if not group or dataset_id != da.get("repo_id") or episode_id < 0:
                         raise ContractError("Missing provenance group, repo mismatch or negative episode")
                     if (dataset_id, episode_id) in seen_episodes:

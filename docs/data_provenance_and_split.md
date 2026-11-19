@@ -27,6 +27,8 @@
 4. Validation可以用于选Checkpoint，Test和保留视角不能调参；模型的原始LIBERO训练历史必须单独披露。
 5. 10Hz示教、20Hz在线控制不能凭`[50,7]`动作块形状视为等价；必须核对动作的时间单位、归一化、7维控制量和重采样协议。
 
+真实CSV还必须填写`source_evidence`（可追溯的资产/原轨迹/失败源记录）和`review_status=verified`。没有真实审查证据，`split`与`plan-train`都应该拒绝；仓库中的`synthetic`示例仅用于学习测试，不能用来生成正式训练命令。
+
 工具只读取本地`meta/info.json`与人工审定的CSV，默认无网络，绝不下载整套数据。先运行：
 
 ```bash
