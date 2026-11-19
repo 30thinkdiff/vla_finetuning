@@ -1,0 +1,23 @@
+name: CPU-only contract tests
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "examples/**"
+      - "configs/**"
+      - "pyproject.toml"
+      - ".github/workflows/cpu.yml"
+  pull_request:
+
+jobs:
+  stdlib-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Run without torch, network downloads or GPU
+        run: python -m unittest discover -s tests -v

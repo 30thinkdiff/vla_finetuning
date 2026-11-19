@@ -1,0 +1,28 @@
+{
+  "purpose": "Template only. DO NOT launch until every pin, provenance group and real batch are verified.",
+  "lerobot": {
+    "source_revision": "7e241bd630a3719a56157a497ce5d08f244784f1"
+  },
+  "model": {
+    "repo_id": "lerobot/smolvla_libero",
+    "model_revision": "REPLACE_WITH_EXACT_40_CHAR_SHA",
+    "policy_path": "/root/autodl-tmp/vla_finetuning/model_cache/PINNED_LOCAL_SMOLVLA_LIBERO_SNAPSHOT"
+  },
+  "data": {
+    "repo_id": "lerobot/libero_plus",
+    "dataset_revision": "REPLACE_WITH_EXACT_40_CHAR_SHA",
+    "dataset_root": "/root/autodl-tmp/vla_finetuning/datasets/curated_plus_subset",
+    "episode_indices": [],
+    "train_split_manifest": "REPLACE_WITH_AUDITED_SOURCE_GROUP_SPLIT_JSON",
+    "source_perturbation_mapping": "UNVERIFIED"
+  },
+  "run": {
+    "output_dir": "/root/autodl-tmp/vla_finetuning/runs/plus_lora_smoke_001",
+    "steps": 50,
+    "batch_size": 1,
+    "save_freq": 50,
+    "peft_method": "LORA",
+    "lora_rank": 8,
+    "lora_alpha": 8
+  }
+}

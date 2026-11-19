@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vla-finetuning-research"
+version = "0.1.0"
+description = "CPU-first, provenance-aware preparation for SmolVLA post-training research"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+learning = ["torch"]
+metadata = ["huggingface_hub"]
+# Do not install LeRobot into the Corrector runtime. Pin it in a dedicated venv.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+vla-study = "vla_finetuning.cli:main"

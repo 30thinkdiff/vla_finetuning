@@ -1,0 +1,44 @@
+# Credentials and cloud/server state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_ed25519*
+.cache/
+hf_cache/
+huggingface/
+wandb/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# All potentially large/private experimental material
+datasets/
+model_cache/
+models/
+checkpoints/
+runs/
+outputs/
+logs/
+videos/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.parquet
+*.mp4
+*.npz
+*.zip
+*.tar
+*.tar.gz
+
+# Local editor
+.vscode/
+.idea/
