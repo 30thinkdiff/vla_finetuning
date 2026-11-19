@@ -128,3 +128,8 @@ PYTHONPATH=src python -m vla_finetuning.recovery_cli audit-scenes --index /path/
 ```
 
 **CI通过不代表Recovery数据已经联调、LoRA已经训练或闭环完成。** 当前正在跑的Corrector GPU任务不受此分支影响，默认不调用数据下载/训练/仿真。
+
+### Recovery正式启动：ModelScope精确文件流水线（仍需GPU空闲确认）
+
+新增 `scripts/recovery_hub.py`，使用独立 `modelscope-hub` 包；默认只打印计划，显式 `--allow-network` 才获取版本/清单，`download --apply` 才真正下载。先列出 Expert/FailureScenes revision 与文件大小，生成元数据manifest；读取真实v2.1 Episode索引后，再生成样本manifest。每阶段使用唯一 `--receipt-id`，把文件保存到同一个固定版本数据根目录。下载后记录每个文件SHA256；当上游未提供SHA时，**本地SHA只用于重现校验，不证明与远端一致**。SDK传输无法强制流式字节上限；必须审查清单和磁盘预算。详见 `docs/recovery_integration_gap.md`。
+
