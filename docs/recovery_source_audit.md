@@ -6,6 +6,19 @@
 > **并未**读取 ModelScope 官方 Expert 数据集的真实 meta/info.json 或任一训练 Episode，
 > 不应凭官方仓库的示例代码断言下载后的列名、数据体积、归一化或数据源对应关系。
 
+
+## 2026-11-19 官方论文/源码补充核查（较前一版信息更明确）
+
+**论文**：[arXiv:2609.05178v4](https://arxiv.org/html/2609.05178)，2026-11-03。
+
+已由论文直接确认：Expert为LeRobot v2.1；20Hz双相机（third-person/wrist）；Parquet低维状态/动作，分路MP4；`meta/info.json`、`episodes.jsonl`、`episodes_stats.jsonl`、`tasks.jsonl`；3184回合/625731帧，来自413个源失败场景、4名SpaceMouse遥操作员。论文表述为110个task types；**官网同页视频示例图另写78种**，具体应以真实`tasks.jsonl`去重核实，不能默认两者完全一致。
+
+**动作**：论文E.2用于各基线的统一控制契约为7维delta末端姿态＋抓手，20Hz；官方`examples/LIBERO/eval_files/eval_libero_custom_scene.py`确认评测图像分别来自`agentview_image`和`robot0_eye_in_hand_image`，各执行`[::-1,::-1]`翻转；评测状态拼接`EEF xyz(3)+quaternion->axis-angle(3)+gripper_qpos(2)`；策略接口`world_vector(3)+rotation_delta(3)+open_gripper(1)`，模型侧抓手`0=close/1=open`，转换为仿真侧`+1=close/-1=open`；官方评测输出NPZ中的抓手则重新转为0/1。**注意**：这些是评测代码/其导出的数据的明确契约，并不是对`LIBERO_Recovery_Expert`实际Parquet列值/归一化的逐值检查。论文称Expert记录“robot joint states”，与评测端的8维EEF状态描述并不等价；真实Expert `observation.state` 维度和含义仍不可宣称已证实。训练图像分辨率（论文E.2为224×224）也不等于原始MP4分辨率。
+
+**转换风险**：固定`huggingface/lerobot@7e241bd...`确实有`src/lerobot/scripts/convert_dataset_v21_to_v30.py`，但源码包含`shutil.rmtree`、目录move和默认`push_to_hub=True`。绝不能对原始模型/数据目录直接运行，也不得通过`main`覆盖真实ModelScope快照。只允许以后在独立复制的临时目标目录、禁用Hub上传并审核空间/IO之后使用。官方Recovery README所指`examples/LIBERO/eval_files/convert_eval_to_lerobot.py`在当前官方仓库`832d54d`文件树中**未找到**；不要把另一个Robotwin转换器冒充它。
+
+**对工程的影响**：先使用`recovery_v21.py`读取真实`meta/info.json`+ `meta/episodes.jsonl` 生成精确Episode Parquet/双相机MP4路径计划（纯CPU、无下载）；确认源数据/训练LeRobot版本后再决定转换/兼容读，不假设已经转换。P0尚未访问ModelScope Expert实际文件，**safe_to_train=false**。
+
 ## 1. 公开来源分工（不要互换）
 
 | ID | 类型 | 已核实用途 | 仍未知 |
