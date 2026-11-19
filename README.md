@@ -38,6 +38,8 @@ git pull --ff-only origin main
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m vla_finetuning preflight --data-root /root/autodl-tmp
 PYTHONPATH=src python -m vla_finetuning flow-demo
+# 若当前独立Python环境已经安装torch，可额外练习CPU LoRA两步梯度:
+PYTHONPATH=src python -m vla_finetuning lora-demo
 PYTHONPATH=src python -m vla_finetuning split --csv examples/provenance.synthetic.csv --out runs/example_split.json
 PYTHONPATH=src python -m vla_finetuning plan-train --config configs/experiment.template.json
 ```

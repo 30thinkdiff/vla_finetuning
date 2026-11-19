@@ -21,6 +21,10 @@
 
 ## 03. LoRA与梯度
 
+如果环境里已经有PyTorch，先执行`PYTHONPATH=src python -m vla_finetuning lora-demo`。这是真实的**CPU两步梯度更新**：3→2的冻结线性层，外加rank=2的A/B分支，展示`optimizer.zero_grad`、`backward`、`optimizer.step`的真实行为。首次初始化`B=0`时，A的梯度为0、B的梯度非零；第二步A开始有梯度。冻结的base矩阵应逐位不变，A/B均发生变化。这个微型例子既不加载SmolVLA，也不代表LIBERO训练已完成。
+
+
+
 手算`W0 + (alpha/r)B A`的参数数量。查`audit_trainable_parameters`检查实际模型中`requires_grad=True`的名字/数量；默认应验证可训练参数是否真是预期LoRA，不直接假设所有`q_proj`都属于Expert。给出一次`zero_grad→forward→backward→clip→optimizer.step`的计算图，解释冻结上游权重不等于对全部forward使用`torch.no_grad()`。
 
 ## 04. 实验能证明什么

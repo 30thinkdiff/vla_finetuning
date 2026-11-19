@@ -31,6 +31,7 @@ def main(argv=None):
     p.add_argument("--val-frac", type=float, default=0.2)
 
     sub.add_parser("flow-demo", help="Pure-Python two-number Flow Matching example")
+    sub.add_parser("lora-demo", help="Two CPU PyTorch LoRA optimization steps; no CUDA")
 
     p = sub.add_parser("plan-train", help="Validate config; print official CLI without execution")
     p.add_argument("--config", type=Path, default=Path("configs/experiment.template.json"))
@@ -50,6 +51,9 @@ def main(argv=None):
             result = split_provenance_csv(args.csv, args.seed, args.train_frac, args.val_frac)
         elif args.command == "flow-demo":
             result = two_number_example()
+        elif args.command == "lora-demo":
+            from .lora_lab import two_step_lora_demo
+            result = two_step_lora_demo()
         elif args.command == "plan-train":
             result = training_plan(args.config)
         elif args.command == "launch-train":

@@ -35,6 +35,18 @@ class FlowTorchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             masked_velocity_mse(x, x, torch.ones(1, 2, dtype=torch.bool))
 
+    def test_lora_gradients_and_frozen_weight(self):
+        from vla_finetuning.lora_lab import two_step_lora_demo
+        report = two_step_lora_demo()
+        self.assertEqual(report["total_parameters"], 16)
+        self.assertEqual(report["trainable_parameters"], 10)
+        self.assertTrue(report["frozen_base_unchanged"])
+        self.assertTrue(report["lora_A_updated"])
+        self.assertTrue(report["lora_B_updated"])
+        self.assertEqual(report["steps"][0]["A_grad_norm"], 0.0)
+        self.assertGreater(report["steps"][0]["B_grad_norm"], 0.0)
+        self.assertGreater(report["steps"][1]["A_grad_norm"], 0.0)
+
     def test_lora_audit_is_not_fake(self):
         m = torch.nn.Linear(3, 2)
         result = audit_trainable_parameters(m)
