@@ -75,6 +75,13 @@ PYTHONPATH=src python -m vla_finetuning audit-metadata --info /path/to/meta/info
 
 先读[数据来源和防泄漏](docs/data_provenance_and_split.md)，再读[研究协议](docs/research_protocol.md)，最后跟着[Flow Matching/LoRA训练习题](docs/learn_by_doing.md)运行小实验。第一版训练模板见`configs/experiment.template.json`。
 
+## 阶段化交付：工程代码与你的实现边界
+
+- [数据获取与分类实战](docs/data_stage_walkthrough.md)：元数据只读审计、显式限额网络获取、v3任务索引。
+- [训练及闭环阶段接口](docs/model_and_evaluation_stage.md)：只读模型文件检查、配对评测协议检查，不加载模型与仿真。
+- [你亲手实现的三个核心函数](exercises/student.py)及[验收测试](exercises/tests/test_student.py)：任务身份、动作Chunk/Padding、同条件评测。练习测试初次失败是预期行为，不属于正式CI测试失败。
+- `plan-train`在真实来源证据尚未人工审核前继续`BLOCKED`。虚构`synthetic`划分永远不能作为正式训练数据证明。
+
 ## 下一阶段进入条件
 
 1. 审计可追溯来源的真实Plus小子集，检查相机映射、控制量、FPS、数据归一化与Episode划分；
