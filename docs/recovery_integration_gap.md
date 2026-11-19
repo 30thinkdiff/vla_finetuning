@@ -87,3 +87,15 @@ PYTHONPATH=src python -m vla_finetuning.recovery_cli plan-mixture \
 (3) 单回合M0闭环、视频与控制动作核对；
 (4) 独立训练环境50步LoRA实测和Checkpoint验证；
 (5) 冻结M1/M2实验矩阵，再考虑源样本混合，最后才是M3。
+
+## 新增：仅生成Recovery闭环试验清单（不执行仿真）
+
+```bash
+PYTHONPATH=src python -m vla_finetuning.recovery_cli plan-eval \
+  --index datasets/recovery_scenes/index/selection.jsonl \
+  --methods M0,M1,M2 --seed 42 --per-suite-level 2 \
+  --open-trials 1 --close-trials 1 \
+  --out runs/recovery_eval_plan_001.json
+```
+
+这会按官方索引的suite×level分桶稳定选择场景、列出方法与预期回合数，但**不会**检查真实BDDL/npy、运行官方随机采样/settle、加载模型或产生真实初始状态SHA。输出`perturbed_state_sha256=null`是故意的：只有实际仿真状态生成以后才能填入。它不是作者默认采样器的等价复现。M0/M1/M2对应的checkpoint依然必须另行固定并审核。
