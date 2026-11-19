@@ -110,9 +110,9 @@ def download(manifest, target, max_gib, api, receipt_id="snapshot"):
         p = target/x["path"]
         if p.is_symlink() or any(a.is_symlink() for a in p.parents if a != target and target in a.parents):
             raise ValueError("Symlink destination detected: "+str(p))
-        if p.exists() and (p.stat().st_size != x["size_bytes"] or
-                           (x.get("sha256") and sha256(p) != x["sha256"])):
-            raise ValueError("Existing file fails inventory checks: "+str(p))
+        if p.exists() and (not x.get("sha256") or p.stat().st_size != x["size_bytes"] or
+                           sha256(p) != x["sha256"]):
+            raise ValueError("Cannot safely reuse existing file without matching remote SHA256: "+str(p))
     target.mkdir(parents=True, exist_ok=True)
     results = []
     for x in checked["files"]:
@@ -132,7 +132,7 @@ def download(manifest, target, max_gib, api, receipt_id="snapshot"):
         results.append({"path": x["path"], "size_bytes": p.stat().st_size, "sha256": digest})
         print("VERIFIED", x["path"], flush=True)
     receipt_obj = {"repo_id": manifest["repo_id"], "revision": manifest["revision"],
-                   "status": "LOCAL_CONTENT_VERIFIED_SEMANTICS_UNVERIFIED",
+                   "status": "LOCAL_SIZE_CHECKED_SHA_RECORDED_SEMANTICS_UNVERIFIED",
                    "files": results}
     write_new(receipt, receipt_obj)
     return {"receipt": str(receipt), "files": len(results), "status": receipt_obj["status"]}
