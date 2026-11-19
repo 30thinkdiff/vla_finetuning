@@ -26,6 +26,15 @@ export HF_DATASETS_CACHE=/root/autodl-tmp/vla_finetuning/.cache/huggingface/data
 
 上述命令本身不会下载任何文件。不要在此仓库复制原Corrector训练目录、旧Checkpoint或SSH私钥。
 
+## 新增：数据获取与亲手实现练习
+
+**请先阅读[阶段A：数据获取、v2/v3元数据和代码练习](docs/data_stage_walkthrough.md)。**
+
+- 已实现`inspect-data-layout`：只读本地`meta/info.json`及任务/Episode索引结构。
+- 已实现`hf-pin`及`fetch-metadata`：必须明确`--allow-network`，下载**仅限指定的小元数据文件**（默认单文件上限512KiB），不接触模型或训练视频。
+- `exercises/student.py`的三道题专门留给你写：任务身份解析、Episode内Action Chunk/Mask、配对闭环成败统计；测试在`exercises/tests`，未完成时失败属于预期状态，独立于正式CI。
+- `lora-demo`需要可选PyTorch；当前系统Python缺Torch不影响其它功能，**不为此修改Corrector的venv**。
+
 ## 立刻可运行（不会调用GPU）
 
 在2号机原项目根目录：
@@ -38,6 +47,8 @@ git pull --ff-only origin main
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m vla_finetuning preflight --data-root /root/autodl-tmp
 PYTHONPATH=src python -m vla_finetuning flow-demo
+# 以下学生练习测试会在你填完TODO前失败，这是预期行为：
+# PYTHONPATH=src python -m unittest discover -s exercises/tests -v
 # 若当前独立Python环境已经安装torch，可额外练习CPU LoRA两步梯度:
 PYTHONPATH=src python -m vla_finetuning lora-demo
 PYTHONPATH=src python -m vla_finetuning split --csv examples/provenance.synthetic.csv --out runs/example_split.json
