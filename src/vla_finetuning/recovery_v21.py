@@ -36,8 +36,8 @@ def _resolve_template(template: str, *, episode_chunk: int, episode_index: int,
     except (IndexError, KeyError, ValueError, TypeError, OverflowError) as exc:
         raise ContractError("Cannot render v2.1 path template") from exc
     path = PurePosixPath(rendered)
-    if path.is_absolute() or ".." in path.parts or "." in path.parts or not path.parts or
-            rendered.startswith("~") or "//" in rendered or ":" in rendered:
+    if (path.is_absolute() or ".." in path.parts or "." in path.parts or not path.parts
+            or rendered.startswith("~") or "//" in rendered or ":" in rendered):
         raise ContractError("Unsafe rendered v2.1 relative path")
     return path.as_posix()
 
