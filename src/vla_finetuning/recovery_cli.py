@@ -30,6 +30,9 @@ def main(argv=None):
     a.add_argument("--batch-size", type=int, default=1)
     a.add_argument("--seed", type=int, default=42)
     a.add_argument("--recovery-fraction", type=float)
+    a = inp("plan-materialization")
+    a.add_argument("--split", type=Path, required=True)
+    a.add_argument("--alignment", type=Path, required=True)
     a = inp("plan-eval")
     a.add_argument("--index", type=Path, required=True)
     a.add_argument("--methods", default="M0,M1,M2", help="Comma-separated identifiers")
@@ -63,6 +66,9 @@ def main(argv=None):
             result = plan_mixture(args.split, method=args.method, steps=args.steps,
                                   batch_size=args.batch_size, seed=args.seed,
                                   recovery_fraction=args.recovery_fraction)
+        elif args.operation == "plan-materialization":
+            from .recovery_merge_plan import plan_mixed_v3_dataset
+            result = plan_mixed_v3_dataset(args.split, args.alignment)
         elif args.operation == "plan-eval":
             from .recovery_eval_plan import plan_recovery_cases
             result = plan_recovery_cases(args.index, methods=args.methods.split(","),
