@@ -38,7 +38,7 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 # Keep the LIBERO-plus namespace separate from vanilla hf-libero. Do not install
 # the LeRobot [libero] extra here, as it may replace the desired fork.
-"$VENV/bin/python" -m pip install --disable-pip-version-check -e "$LEROBOT" \
+"$VENV/bin/python" -m pip install --disable-pip-version-check -e "$LEROBOT[peft]" \
   "robosuite==1.4.1" bddl easydict mujoco wand scikit-image gym
 "$VENV/bin/python" -m pip uninstall -y hf-libero || true
 "$VENV/bin/python" -m pip install --no-deps -e "$SOURCE"
