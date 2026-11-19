@@ -69,6 +69,12 @@ def parser():
     s.add_argument("--confirm-gpu-idle", action="store_true")
     add_output(s)
 
+    s = sub.add_parser("resume-plan", help="Preview safe official optimizer/RNG resume; no GPU use")
+    s.add_argument("--config", type=Path, required=True)
+    s.add_argument("--checkpoint", type=Path, required=True)
+    s.add_argument("--binary", default="lerobot-train")
+    add_output(s)
+
     s = sub.add_parser("checkpoint-audit", help="List checkpoint files (no deserialization)")
     s.add_argument("--checkpoint", type=Path, required=True)
     add_output(s)
@@ -141,6 +147,9 @@ def main(argv=None):
                                               confirmed_idle=a.confirm_gpu_idle)
                 result = {"status": "OFFICIAL_EVAL_PROCESS_EXITED", "returncode": return_code,
                           "note": "Verify actual eval results and task provenance."}
+        elif a.operation == "resume-plan":
+            from .engine import resume_plan
+            result = resume_plan(a.config, a.checkpoint, binary=a.binary)
         elif a.operation == "checkpoint-audit":
             from .engine import checkpoint_inventory
             result = checkpoint_inventory(a.checkpoint)
