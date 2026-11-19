@@ -74,10 +74,8 @@ def validate_eval_plan(path):
                 raise ContractError("Missing case field: " + key)
         if not isinstance(case.get("seed"), int) or isinstance(case["seed"], bool):
             raise ContractError("Evaluation seed must be int")
-        if not SHA.fullmatch(case["initial_state_sha256"]) and not re.fullmatch(
-            r"[0-9a-fA-F]{64}", case["initial_state_sha256"]
-        ):
-            raise ContractError("initial_state_sha256 must be 40/64 hexadecimal chars")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", case["initial_state_sha256"]):
+            raise ContractError("initial_state_sha256 must be exactly 64 hexadecimal characters")
         identity = (case["domain"], case["condition_id"], case["seed"])
         if identity in seen:
             raise ContractError("Duplicate evaluation case: " + repr(identity))
