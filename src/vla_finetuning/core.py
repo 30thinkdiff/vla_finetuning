@@ -214,6 +214,42 @@ def training_plan(path):
     rank, alpha = run.get("lora_rank"), run.get("lora_alpha")
     if not isinstance(rank, int) or rank < 1 or not isinstance(alpha, int) or alpha < 1:
         reasons.append("Require positive integer LoRA rank and alpha")
+    # A split manifest is mandatory, not merely optional documentation.
+    # This ensures the exact CLI train episodes equal the reviewed source groups.
+    manifest = da.get("train_split_manifest")
+    if not isinstance(manifest, str) or not Path(manifest).is_absolute():
+        reasons.append("Provide an absolute path to an audited train_split_manifest")
+    elif not Path(manifest).is_file():
+        reasons.append("Audited train_split_manifest does not exist: " + manifest)
+    else:
+        try:
+            split = read_json(manifest)
+            buckets = split["splits"]
+            expected_buckets = ("train", "validation", "test")
+            if any(not isinstance(buckets[k], list) or not buckets[k] for k in expected_buckets):
+                raise ContractError("train/validation/test buckets must be nonempty lists")
+            groups = {}
+            train_ids = []
+            seen_episodes = set()
+            for section in expected_buckets:
+                for row in buckets[section]:
+                    group = row["source_group"].strip()
+                    dataset_id = row["dataset_id"].strip()
+                    episode_id = int(row["episode_id"])
+                    if not group or dataset_id != da.get("repo_id") or episode_id < 0:
+                        raise ContractError("Missing provenance group, repo mismatch or negative episode")
+                    if (dataset_id, episode_id) in seen_episodes:
+                        raise ContractError("Duplicate episode across provenance manifest")
+                    seen_episodes.add((dataset_id, episode_id))
+                    if group in groups and groups[group] != section:
+                        raise ContractError("Source group crosses train/validation/test")
+                    groups[group] = section
+                    if section == "train":
+                        train_ids.append(episode_id)
+            if not isinstance(da.get("episode_indices"), list) or set(train_ids) != set(da["episode_indices"]) or len(train_ids) != len(da["episode_indices"]):
+                raise ContractError("CLI training Episode IDs do not equal audited train split")
+        except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError) as exc:
+            reasons.append("Invalid audited train_split_manifest: " + str(exc))
     if reasons:
         return {"status": "BLOCKED", "reasons": reasons,
                 "config_sha256": json_digest(path), "gpu_used": False, "command": None}

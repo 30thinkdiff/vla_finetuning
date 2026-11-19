@@ -77,6 +77,37 @@ class PreparationTests(unittest.TestCase):
         self.assertIsNone(result["command"])
         self.assertGreaterEqual(len(result["reasons"]), 2)
 
+    def test_training_plan_requires_consistent_source_manifest(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            manifest = root / "split.json"
+            splits = {"splits": {
+                "train": [{"dataset_id": "org/demo", "episode_id": "1", "source_group": "g1"}],
+                "validation": [{"dataset_id": "org/demo", "episode_id": "2", "source_group": "g2"}],
+                "test": [{"dataset_id": "org/demo", "episode_id": "3", "source_group": "g3"}]}}
+            manifest.write_text(json.dumps(splits), encoding="utf-8")
+            cfg = {
+                "lerobot": {"source_revision": "a" * 40},
+                "model": {"model_revision": "b" * 40, "repo_id": "org/model",
+                          "policy_path": str(root / "model")},
+                "data": {"repo_id": "org/demo", "dataset_revision": "c" * 40,
+                         "dataset_root": str(root / "dataset"),
+                         "episode_indices": [1],
+                         "train_split_manifest": str(manifest)},
+                "run": {"output_dir": str(root / "run"), "steps": 50,
+                        "batch_size": 1, "save_freq": 50, "peft_method": "LORA",
+                        "lora_rank": 8, "lora_alpha": 8}
+            }
+            config = root / "config.json"
+            config.write_text(json.dumps(cfg), encoding="utf-8")
+            result = training_plan(config)
+            self.assertTrue(result["status"].startswith("READY_FOR_MANUAL"))
+            self.assertTrue(any("--dataset.episodes=[1]" in v for v in result["command"]))
+            cfg["data"]["episode_indices"] = [2]
+            config.write_text(json.dumps(cfg), encoding="utf-8")
+            self.assertEqual(training_plan(config)["status"], "BLOCKED")
+            self.assertIn("manifest", " ".join(training_plan(config)["reasons"]))
+
     def test_preflight_is_read_only(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(preflight(d)["status"], "read_only")
