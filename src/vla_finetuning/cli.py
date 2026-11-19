@@ -47,6 +47,14 @@ def main(argv=None):
     p.add_argument("--output-root", type=Path, default=Path("datasets/metadata"))
     p.add_argument("--allow-network", action="store_true")
 
+    p = sub.add_parser("inspect-model", help="Inspect local model config and weight filenames only; never load model")
+    p.add_argument("--model-root", type=Path, required=True)
+    p.add_argument("--out", type=Path)
+
+    p = sub.add_parser("validate-eval-plan", help="Validate paired-rollout manifest without loading simulator")
+    p.add_argument("--plan", type=Path, required=True)
+    p.add_argument("--out", type=Path)
+
     sub.add_parser("flow-demo", help="Pure-Python two-number Flow Matching example")
     sub.add_parser("lora-demo", help="Two CPU PyTorch LoRA optimization steps; no CUDA")
 
@@ -76,6 +84,12 @@ def main(argv=None):
             from .metadata import fetch_metadata
             result = fetch_metadata(args.repo, args.revision, args.file,
                                     args.output_root, allow_network=args.allow_network)
+        elif args.command == "inspect-model":
+            from .protocols import inspect_model_snapshot
+            result = inspect_model_snapshot(args.model_root)
+        elif args.command == "validate-eval-plan":
+            from .protocols import validate_eval_plan
+            result = validate_eval_plan(args.plan)
         elif args.command == "flow-demo":
             result = two_number_example()
         elif args.command == "lora-demo":
