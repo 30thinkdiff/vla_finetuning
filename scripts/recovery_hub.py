@@ -38,6 +38,8 @@ def inventory_from_remote(repo, rev, api):
         raise ValueError("Use reviewed non-default revision")
     files = {}
     for info in api.list_repo_files(repo, "dataset", revision=rev, recursive=True):
+        if getattr(info, "type", "blob") not in ("blob", "file"):
+            continue
         name = safe_path(info.path)
         size = info.size
         if name in files or type(size) is not int or size < 0:
@@ -61,14 +63,16 @@ def exact_manifest(inv, paths, max_gib):
     lookup = {}
     for x in inv.get("files", []):
         p = safe_path(x["path"])
-        if p in lookup or type(x["size_bytes"]) is not int or x["size_bytes"] <= 0:
-            raise ValueError("Unknown/zero/duplicate byte size")
+        if p in lookup or type(x["size_bytes"]) is not int or x["size_bytes"] < 0:
+            raise ValueError("Unknown/negative/duplicate byte size")
         lookup[p] = x
     if not paths:
         raise ValueError("No selected files")
     selected = sorted({safe_path(p) for p in paths})
     if any(p not in lookup for p in selected):
         raise ValueError("Selected file absent from published inventory")
+    if any(lookup[p]["size_bytes"] <= 0 for p in selected):
+        raise ValueError("Selected file has missing or zero byte size")
     total = sum(lookup[p]["size_bytes"] for p in selected)
     if total > max_gib * 1024**3:
         raise ValueError("Download exceeds budget")
