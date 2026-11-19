@@ -69,8 +69,12 @@ def audit_expert_info(path):
     if features["observation.state"].get("shape") != [8]:
         warnings.append("State dimensionality is not confirmed [8]")
     fps = obj.get("fps")
+    if obj.get("codebase_version") != "v2.1":
+        warnings.append("LIBERO-RECOVER arXiv:2609.05178v4 says Expert is v2.1; observed version differs or absent")
     if type(fps) not in (int, float) or not math.isfinite(fps) or fps <= 0:
         warnings.append("Invalid or absent FPS")
+    elif fps != 20:
+        warnings.append("LIBERO-RECOVER paper states 20 Hz; observed dataset FPS differs")
     return {"status": "METADATA_ONLY_NOT_SEMANTICALLY_VERIFIED", "path": str(path.resolve()),
             "sha256": _sha_file(path), "codebase_version": obj.get("codebase_version"),
             "total_episodes": obj.get("total_episodes"), "fps": fps,
