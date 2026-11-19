@@ -1,0 +1,9 @@
+domain,condition_id,seed,method,success
+SYNTHETIC,view_001,1000,B0,false
+SYNTHETIC,view_001,1000,L1,true
+SYNTHETIC,view_002,1000,B0,true
+SYNTHETIC,view_002,1000,L1,false
+SYNTHETIC,view_003,1001,B0,true
+SYNTHETIC,view_003,1001,L1,true
+SYNTHETIC,view_004,1001,B0,false
+SYNTHETIC,view_004,1001,L1,false

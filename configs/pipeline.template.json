@@ -1,0 +1,45 @@
+{
+  "purpose": "TEMPLATE ONLY - blocked until exact official revisions and source-group split are reviewed",
+  "software": {
+    "lerobot_sha": "7e241bd630a3719a56157a497ce5d08f244784f1",
+    "libero_plus_sha": "4976dc30028e805ff8094b55501d532c48fec182"
+  },
+  "paths": {
+    "project_root": "/root/autodl-tmp/vla_finetuning",
+    "min_free_gib": 30
+  },
+  "model": {
+    "repo_id": "lerobot/smolvla_libero",
+    "revision": "REPLACE_WITH_PINNED_MODEL_SHA",
+    "local_dir": "/root/autodl-tmp/vla_finetuning/models/smolvla_libero_PINNED"
+  },
+  "dataset": {
+    "repo_id": "lerobot/libero_plus",
+    "revision": "REPLACE_WITH_PINNED_DATASET_SHA",
+    "local_dir": "/root/autodl-tmp/vla_finetuning/datasets/libero_plus_PINNED",
+    "split_manifest": "/root/autodl-tmp/vla_finetuning/runs/AUDITED_SPLIT.json",
+    "train_episodes": []
+  },
+  "train": {
+    "run_id": "plus_expert_lora_001",
+    "output_dir": "/root/autodl-tmp/vla_finetuning/runs/plus_expert_lora_001",
+    "method": "expert_lora",
+    "rank": 8,
+    "lora_alpha": 8,
+    "lr": 0.0001,
+    "precision": "fp32",
+    "seed": 42,
+    "steps": 50,
+    "batch_size": 1,
+    "save_freq": 50
+  },
+  "evaluation": {
+    "suite": "libero_object",
+    "variant_task_ids": [],
+    "control_mode": "relative",
+    "action_horizon": 20,
+    "seed": 1000,
+    "n_episodes": 1,
+    "max_steps": 280
+  }
+}
