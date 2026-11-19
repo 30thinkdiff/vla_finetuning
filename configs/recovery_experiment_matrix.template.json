@@ -1,0 +1,81 @@
+{
+  "status": "PLANNING_ONLY_DO_NOT_TRAIN",
+  "research_question": "Does Recovery Expert post-training transfer to autonomous closed-loop failures without normal task forgetting?",
+  "pins": {
+    "recovery_code": "832d54dfc43f0c9e4240bb8d92f5fda7001bb093",
+    "lerobot_code": "7e241bd630a3719a56157a497ce5d08f244784f1",
+    "smolvla_libero_model": "REPLACE_WITH_REAL_SHA",
+    "recovery_expert": "REPLACE_WITH_REAL_MODELSCOPE_REVISION",
+    "recovery_scenes": "REPLACE_WITH_REAL_MODELSCOPE_REVISION",
+    "normal_data": "REPLACE_WITH_REAL_SHA"
+  },
+  "fixed_training_contract": {
+    "precision": "UNVERIFIED",
+    "lora_targets": "UNVERIFIED",
+    "rank": 8,
+    "alpha": 8,
+    "effective_batch_size": "UNVERIFIED",
+    "optimizer": "UNVERIFIED",
+    "action_normalization": "UNVERIFIED",
+    "seed": [
+      42,
+      43,
+      44
+    ],
+    "max_gpu_hours": "TO_BE_MEASURED"
+  },
+  "experiments": [
+    {
+      "id": "M0",
+      "policy": "unchanged_smolvla_libero",
+      "data": "none",
+      "steps": 0,
+      "goal": "unmodified baseline"
+    },
+    {
+      "id": "M1",
+      "policy": "LoRA",
+      "data": "Recovery Expert ONLY",
+      "steps": "MATCHED_BUDGET_TBD",
+      "goal": "recovery and retention"
+    },
+    {
+      "id": "M2",
+      "policy": "LoRA",
+      "data": "Recovery Expert + normal LIBERO",
+      "recovery_ratio": "TBD",
+      "steps": "MATCHED_BUDGET_TBD",
+      "goal": "mixed-data baseline not original innovation"
+    },
+    {
+      "id": "M3",
+      "policy": "BLOCKED",
+      "candidate": "gradient-conflict constrained or source-balanced sampling, decide AFTER M0-M2",
+      "steps": "MATCHED_BUDGET_TBD",
+      "goal": "independent hypothesis and ablation"
+    }
+  ],
+  "evaluation": {
+    "recovery": [
+      "L1",
+      "L2",
+      "L3",
+      "L4"
+    ],
+    "gripper": [
+      "open",
+      "close"
+    ],
+    "normal_LIBERO": true,
+    "online_failure_transfer": true,
+    "pairing": [
+      "source_scene_id",
+      "seed",
+      "gripper_init",
+      "initial_state_sha256",
+      "protocol_sha256"
+    ],
+    "independent_source_groups_required": true
+  },
+  "allow_gpu": false
+}
