@@ -87,7 +87,7 @@ def sha256(path):
     return dig.hexdigest()
 
 
-def download(manifest, target, max_gib, api):
+def download(manifest, target, max_gib, api, receipt_id="snapshot"):
     from vla_finetuning.guards import require_gpu_idle, require_disk
     if manifest.get("kind") != "modelscope_recovery_exact_manifest_v1":
         raise ValueError("Wrong manifest kind")
@@ -97,7 +97,9 @@ def download(manifest, target, max_gib, api):
     if not str(target).startswith("/root/autodl-tmp/"):
         raise ValueError("Require persistent AutoDL data disk")
     require_disk(target, free_gib=max(30, 30+2*checked["total_bytes"]/1024**3))
-    receipt = target/".vla_recovery_verified_receipt.json"
+    if not re.fullmatch("[a-z0-9][a-z0-9_-]{0,31}", receipt_id):
+        raise ValueError("Unsafe receipt ID")
+    receipt = target/(".vla_recovery_verified_"+receipt_id+".json")
     if receipt.exists() or receipt.is_symlink():
         raise ValueError("Existing receipt; refusing to overwrite source snapshot")
     for x in checked["files"]:
@@ -155,6 +157,7 @@ def main(argv=None):
     x.add_argument("--target", required=True)
     x.add_argument("--max-gib", type=float, required=True)
     x.add_argument("--apply", action="store_true")
+    x.add_argument("--receipt-id", default="snapshot", help="Unique identifier for incremental stage")
     a = p.parse_args(argv)
     try:
         if a.operation in ("revisions", "inventory") and not a.allow_network:
@@ -186,7 +189,7 @@ def main(argv=None):
                 out = exact_manifest(manifest, [x["path"] for x in manifest["files"]], a.max_gib)
             else:
                 from modelscope_hub import HubApi
-                out = download(manifest, a.target, a.max_gib, HubApi())
+                out = download(manifest, a.target, a.max_gib, HubApi(), receipt_id=a.receipt_id)
         else:
             raise AssertionError("unreachable")
         print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
