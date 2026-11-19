@@ -119,6 +119,20 @@ def download_plan(plan, target, project_root, *, apply=False, max_gib=1,
     missing = [name for name in plan["files"] if not (target / name).is_file()]
     if missing:
         raise ContractError("Incomplete artifact snapshot: " + repr(missing[:10]))
+    receipt = target / (".vla_receipt_" + plan["kind"] + ".json")
+    if receipt.exists():
+        raise ContractError("Download receipt already exists; refusing overwrite: " + str(receipt))
+    import json
+    import hashlib
+    records = {name: {"size": (target/name).stat().st_size} for name in plan["files"]}
+    receipt_data = {"kind": plan["kind"], "repo_id": plan["repo_id"],
+                    "revision": plan["revision"], "files": records,
+                    "source_plan_status": plan.get("status"), "bytes_planned": plan["total_bytes"],
+                    "sha256_note": "Remote revision pinned; file content hashes not independently computed"}
+    with receipt.open("x", encoding="utf-8") as stream:
+        json.dump(receipt_data, stream, indent=2, sort_keys=True)
+        stream.write("\n")
     return {"status": "DOWNLOAD_COMPLETE_FILES_PRESENT", "path": str(result),
             "file_count": len(plan["files"]), "missing_count": 0,
-            "note": "Presence does not establish correct data semantics or model loadability."}
+            "receipt": str(receipt),
+            "note": "File presence/size checked; semantic and full hash verification remain pending."}
