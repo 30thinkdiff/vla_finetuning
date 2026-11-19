@@ -1,0 +1,22 @@
+{
+  "status": "SYNTHETIC_PROTOCOL_TEMPLATE_ONLY",
+  "revisions": {
+    "simulator": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseline_model": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "methods": ["B0", "L1"],
+  "control": {
+    "control_fps": 20,
+    "action_horizon": 20,
+    "max_steps": 280
+  },
+  "cases": [
+    {
+      "domain": "synthetic_example_not_a_real_environment",
+      "condition_id": "dummy_view_001",
+      "seed": 1000,
+      "instruction": "example only - replace with frozen task language",
+      "initial_state_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ]
+}
