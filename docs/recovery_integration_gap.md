@@ -3,6 +3,23 @@
 **状态：P0 静态实现/纯CPU合同检查。没有真实Recovery样本或GPU训练/闭环验证。**
 与正在运行的Corrector训练隔离；不要修改 \`/root/autodl-tmp/corrector\`。
 
+## 来源核查已确认：Expert优先按LeRobot v2.1准备（2026-11-19）
+
+论文[arXiv:2609.05178v4](https://arxiv.org/html/2609.05178)附录B.5和C.2已经确认：**Expert为v2.1格式、20Hz、双相机；`meta/info.json`+`episodes.jsonl`+`tasks.jsonl`+`episodes_stats.jsonl`、每Episode Parquet和两路MP4。** 不是Plus的v3分片布局。
+
+新增`recovery_v21.py`与`recovery_cli plan-v21-files`：在真实元文件到位后读取`info.json`中**实际**`chunks_size`、`data_path`、`video_path`和两路视频特征键，解析最多100个指定Episode的精确相对路径；默认不下载、不解析视频、不占用GPU。示例：
+
+```bash
+PYTHONPATH=src python -m vla_finetuning.recovery_cli plan-v21-files \
+  --dataset-root datasets/recovery_expert/PINNED \
+  --episodes 0,1,2 \
+  --out runs/recovery_v21_first3_file_plan.json
+```
+
+论文没有公开真实发布快照的精确视频键/文件大小/各维状态；ModelScope源文件本次尚未下载。**不能把评测端8维EEF状态、0/1抓手协议直接宣称已经由Expert训练数据实测确认**。
+
+固定LeRobot中有`src/lerobot/scripts/convert_dataset_v21_to_v30.py`，但**会删除/移动本地目录，默认可能上传**。禁止在不可恢复的原始数据目录直接运行；应另行设计可重复、独立复制和SHA校验的转换流水线。此门槛尚未通过。
+
 ## 已有资产与新模块
 
 | 工程点 | 当前代码 | 验证边界 |
