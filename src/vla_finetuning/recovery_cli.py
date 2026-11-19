@@ -30,6 +30,14 @@ def main(argv=None):
     a.add_argument("--batch-size", type=int, default=1)
     a.add_argument("--seed", type=int, default=42)
     a.add_argument("--recovery-fraction", type=float)
+    a = inp("plan-eval")
+    a.add_argument("--index", type=Path, required=True)
+    a.add_argument("--methods", default="M0,M1,M2", help="Comma-separated identifiers")
+    a.add_argument("--seed", type=int, default=42)
+    a.add_argument("--per-suite-level", type=int, default=2)
+    a.add_argument("--open-trials", type=int, default=1)
+    a.add_argument("--close-trials", type=int, default=1)
+    a.add_argument("--suites", help="Comma-separated suite subset; default all five")
     a = inp("report")
     a.add_argument("--csv", type=Path, required=True)
     a.add_argument("--baseline", default="M0")
@@ -55,6 +63,12 @@ def main(argv=None):
             result = plan_mixture(args.split, method=args.method, steps=args.steps,
                                   batch_size=args.batch_size, seed=args.seed,
                                   recovery_fraction=args.recovery_fraction)
+        elif args.operation == "plan-eval":
+            from .recovery_eval_plan import plan_recovery_cases
+            result = plan_recovery_cases(args.index, methods=args.methods.split(","),
+                                         seed=args.seed, per_suite_level=args.per_suite_level,
+                                         open_trials=args.open_trials, close_trials=args.close_trials,
+                                         suites=args.suites.split(",") if args.suites else None)
         elif args.operation == "report":
             from .recovery_reports import analyze_recovery_csv
             result = analyze_recovery_csv(args.csv, baseline=args.baseline,
