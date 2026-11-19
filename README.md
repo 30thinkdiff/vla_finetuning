@@ -4,7 +4,7 @@
 
 本仓库新增了**正式训练/评测编排、独立环境安装、按来源Episode选择v3实际Parquet/视频分片、Pinned模型/数据下载预算、官方Checkpoint续训计划、官方`eval_info.json`到配对CSV、Recovery子集获取脚本与LIBERO-plus资产安全检查**。参见[完整工程使用手册](docs/ENGINEERING_GUIDE.md)。这些代码已用于静态CI测试，但所有涉及依赖或外部资源的操作需要经过真实环境联调才能宣称已运行成功。
 
-这是对已有 [robot-lab](https://github.com/30thinkdiff/robot-lab/tree/feature/robotlab-replay) 的SmolVLA、Corrector研究的独立后续：优先学习和实现**训练数据审计、Flow Matching、LoRA、Checkpoint与闭环实验协议**；研究主线是 **LIBERO-plus视觉适配**，第二阶段再接入**LIBERO-Recovery失败恢复**。
+这是对已有 [robot-lab](https://github.com/30thinkdiff/robot-lab/tree/feature/robotlab-replay) 的SmolVLA、Corrector研究的独立后续：优先学习和实现**训练数据审计、Flow Matching、LoRA、Checkpoint与闭环实验协议**；当前第二项目优先研究 **LIBERO-Recovery失败恢复后训练**；LIBERO-plus仍是独立的扰动评测/数据来源，二者不能混作同一训练集。
 
 ## 已经具备的能力与边界
 
@@ -102,3 +102,29 @@ PYTHONPATH=src python -m vla_finetuning audit-metadata --info /path/to/meta/info
 4. 通过后再开展B0对L1的同条件闭环。不要提前以MSE下降写求职简历。
 
 **绝对禁止将此项目的训练命令写进Corrector的队列。**
+
+
+## Recovery-Aware SmolVLA P0（2026-11-19）
+
+新的后训练方向优先级为 **恢复来源审计 → M0原始策略基线 → M1恢复数据LoRA → M2混合示教LoRA → 有证据后再选择M3机制**。
+
+已加入**纯CPU、默认无网络/无GPU**的审核与实验计划模块：
+
+- [官方来源及动作协议核对](docs/recovery_source_audit.md)：区分 Expert、FailureScenes、Assets、History 与 Rollouts，并列出真实数据仍未知的字段。
+- [当前代码能做什么/还缺什么](docs/recovery_integration_gap.md)：真实Expert图像/动作检查、ModelScope固定修订、源场景关联、真正的多数据源训练DataLoader、官方Recovery策略评测接入仍是硬阻塞。
+- `src/vla_finetuning/recovery_contract.py`：LeRobot元信息、官方失败场景JSONL、人工来源映射与参考抓手转换；默认 **NOT READY TO TRAIN**。
+- `src/vla_finetuning/recovery_experiments.py`：严格全球来源分组划分审计，M0/M1/M2可复现Episode ID抽样计划（**不是**正式DataLoader/训练）。
+- `src/vla_finetuning/recovery_reports.py`：同场景/种子/抓手状态配对、失败级别结果、源场景聚类bootstrap；仍需逐条核实模型与仿真日志。
+
+所有新命令只读取已在磁盘上的本地文件；没有真实ModelScope数据时，命令应明确STOP而不是制造结果：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+PYTHONPATH=src python -m unittest discover -s tests -v
+PYTHONPATH=src python -m vla_finetuning.recovery_cli --help
+# 取得真实文件以后：
+PYTHONPATH=src .venvs/data/bin/python -m vla_finetuning.recovery_cli audit-expert --info /path/to/REAL/meta/info.json
+PYTHONPATH=src python -m vla_finetuning.recovery_cli audit-scenes --index /path/to/REAL/index/selection.jsonl
+```
+
+**CI通过不代表Recovery数据已经联调、LoRA已经训练或闭环完成。** 当前正在跑的Corrector GPU任务不受此分支影响，默认不调用数据下载/训练/仿真。
