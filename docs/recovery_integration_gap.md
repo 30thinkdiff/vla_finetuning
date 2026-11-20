@@ -155,3 +155,28 @@ PYTHONPATH=src python -m vla_finetuning.recovery_cli plan-materialization \
 ```
 
 配置草案：`configs/recovery_alignment.template.json`，默认`verified=false`且所有语义证据为TBD，预期STOP。需要实际人工作业确认以后才允许生成上述计划。
+
+## 2026-11-20：真实Expert 3条Episode已下载、远端SHA验证通过
+
+实际ModelScope数据快照固定在`2804e989adfb49cdde9b5c04bc7e0fb9f4fbfc73`，真实LeRobot v2.1 info：`fps=20`、3,184 Episode、625,731帧、110任务、两路256×256 AV1视频，动作7维，状态8维。首批选择Episode 0/15/30，计划帧数629/796/647（共2,072），实际远端文件清单9个文件、2,971,391字节。用户终端回传`VERIFIED`9条并生成`.vla_recovery_verified_pilot3.json`，说明下载和远端SHA检查通过；**尚无任何Parquet实际数值/视频解码证据**。
+
+新增`scripts/audit_recovery_payload.py`对本地已下载的文件执行read-only检查：逐文件与原ModelScope Manifest的SHA对比、Parquet数据维度/有限值/帧序号/时间间隔、七维动作及八维状态各维统计、可用`ffprobe`则实际AV1解码并检查每路视频的尺寸/帧率/帧数。输出报告明确`training_ready=false`，避免误把可解码当作动作控制、归一化或来源已证实。
+
+在服务器的`recovery-p0`已检出且工作区干净时更新：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git fetch origin
+git switch recovery-p0
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+REV=2804e989adfb49cdde9b5c04bc7e0fb9f4fbfc73
+DATA="$PWD/datasets/recovery_expert/$REV"
+MANIFEST="runs/recovery_pilot3_manifest_$REV.json"
+PYTHONPATH=src .venvs/data/bin/python scripts/audit_recovery_payload.py \
+  --dataset-root "$DATA" --manifest "$MANIFEST" --episodes 0,15,30 \
+  --out "runs/recovery_payload_audit_$REV.json"
+```
+
+`ffprobe`在PATH中可用时自动解码验证全部6个MP4；否则生成`VIDEO_PROBE_PENDING`状态，必须之后安装合适AV1解码器、复跑到新的报告名，不能将缺失检查视为通过。核查使用`pyarrow`，不需要Torch或CUDA。
+
+即便3条Episode都检查通过：**动作究竟是相对控制还是绝对控制、旋转轴角的具体计算方式、抓手0/1编码、训练视频的翻转与归一化、Expert来源场景关联仍未验收**。不得直接启动M1长训。
