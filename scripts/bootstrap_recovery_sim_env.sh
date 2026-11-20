@@ -7,7 +7,8 @@ SOURCE="$ROOT/vendor/LIBERO-Recovery-$SHA"
 VENV="$ROOT/.venvs/recovery_sim"
 echo "PLAN: official LIBERO-Recovery $SHA -> $SOURCE"
 echo "PLAN: new Python3.10 conda env $VENV, NumPy1.24.4, MuJoCo3.2.3, robosuite1.4.1"
-echo "PLAN: ~230MB Git repo plus Python dependencies; no GPU inference/scenes download"
+echo "PLAN: partial clone --filter=blob:none + sparse tabletop assets (ketchup/basket)"
+echo "PLAN: skip unrelated large scene textures; some assets may require follow-up; no GPU inference"
 if [[ "$#" -ne 1 ]]; then
   echo "DRY RUN: VLA_APPROVED_CPU_IO=YES bash scripts/bootstrap_recovery_sim_env.sh --apply"
   exit 0
@@ -31,43 +32,54 @@ export PIP_CACHE_DIR="$ROOT/.cache/pip"
 export XDG_CACHE_HOME="$ROOT/.cache"
 export OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
 mkdir -p "$ROOT/vendor" "$ROOT/.venvs" "$PIP_CACHE_DIR"
-# An interrupted TLS fetch leaves a valid but EMPTY .git directory.
-# Resume safely instead of assuming that .git implies a checked-out commit.
+# Resume interrupted fetch using *partial clone* and sparse task files.
 if [[ ! -d "$SOURCE/.git" ]]; then
-  [[ ! -e "$SOURCE" ]] || { echo "STOP: source path exists but is not a Git repository"; exit 2; }
+  [[ ! -e "$SOURCE" ]] || { echo "STOP: non-Git source path already exists"; exit 2; }
   mkdir "$SOURCE"
   git -C "$SOURCE" init
 fi
-if [[ "$(git -C "$SOURCE" rev-parse --verify HEAD 2>/dev/null || true)" != "$SHA" ]]; then
-  # The user's main vla_finetuning repo can fetch from GitHub; try SSH first
-  # in non-interactive mode, which avoids the observed HTTPS GnuTLS failure.
-  # A separate HTTPS/HTTP1.1 fallback covers hosts without SSH credentials.
-  echo "[SOURCE] Resume incomplete pinned Recovery checkout; SSH first, HTTPS fallback."
+if ! git -C "$SOURCE" remote get-url origin >/dev/null 2>&1; then
+  git -C "$SOURCE" remote add origin https://github.com/liulin815/LIBERO-Recovery.git
+fi
+SCENE_PATHS=(
+  LIBERO/libero/libero/envs
+  LIBERO/libero/libero/utils
+  LIBERO/libero/libero/benchmark
+  LIBERO/libero/libero/bddl_files
+  LIBERO/libero/configs
+  LIBERO/libero/libero/assets/textures
+  LIBERO/libero/libero/assets/scenes/desk
+  LIBERO/libero/libero/assets/articulated_objects/meshes
+  LIBERO/libero/libero/assets/stable_hope_objects/ketchup
+  LIBERO/libero/libero/assets/stable_scanned_objects/basket
+)
+git -C "$SOURCE" sparse-checkout init --cone
+git -C "$SOURCE" sparse-checkout set "${SCENE_PATHS[@]}"
+git -C "$SOURCE" config remote.origin.promisor true
+git -C "$SOURCE" config remote.origin.partialclonefilter blob:none
+head_sha="$(git -C "$SOURCE" rev-parse --verify HEAD 2>/dev/null || true)"
+if [[ "$head_sha" != "$SHA" ]]; then
+  echo "[SOURCE] Partial blobless Git fetch for fixed SHA; skip unrelated assets."
   success=0
-  if GIT_TERMINAL_PROMPT=0 \
-     GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=12 -o ServerAliveInterval=20" \
-     git -C "$SOURCE" fetch --depth 1 git@github.com:liulin815/LIBERO-Recovery.git "$SHA"; then
+  git -C "$SOURCE" remote set-url origin git@github.com:liulin815/LIBERO-Recovery.git
+  if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=12" git -C "$SOURCE" -c protocol.version=2 fetch --depth 1 --filter=blob:none origin "$SHA"; then
     success=1
   else
-    echo "[SOURCE] SSH port 22 failed; try GitHub SSH over port 443."
-    if GIT_TERMINAL_PROMPT=0 \
-       GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=12 -p 443" \
-       git -C "$SOURCE" fetch --depth 1 \
-       ssh://git@ssh.github.com:443/liulin815/LIBERO-Recovery.git "$SHA"; then
+    git -C "$SOURCE" remote set-url origin ssh://git@ssh.github.com:443/liulin815/LIBERO-Recovery.git
+    if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=12" git -C "$SOURCE" -c protocol.version=2 fetch --depth 1 --filter=blob:none origin "$SHA"; then
       success=1
     else
-      echo "[SOURCE] SSH port 443 failed; retry via HTTPS HTTP/1.1."
-      if GIT_TERMINAL_PROMPT=0 \
-         git -C "$SOURCE" -c http.version=HTTP/1.1 \
-         fetch --depth 1 https://github.com/liulin815/LIBERO-Recovery.git "$SHA"; then
+      git -C "$SOURCE" remote set-url origin https://github.com/liulin815/LIBERO-Recovery.git
+      if GIT_TERMINAL_PROMPT=0 git -C "$SOURCE" -c protocol.version=2 -c http.version=HTTP/1.1 fetch --depth 1 --filter=blob:none origin "$SHA"; then
         success=1
       fi
     fi
   fi
-  [[ "$success" == 1 ]] || { echo "STOP: both GitHub transports failed; no conda environment or model touched"; exit 2; }
+  [[ "$success" == 1 ]] || { echo "STOP: partial fetch failed; no Python packages installed"; exit 2; }
   git -C "$SOURCE" checkout --detach "$SHA"
 fi
-[[ "$(git -C "$SOURCE" rev-parse HEAD)" == "$SHA" ]] || { echo "STOP: Recovery SHA mismatch"; exit 2; }
+[[ "$(git -C "$SOURCE" rev-parse HEAD)" == "$SHA" ]] || { echo "STOP: wrong source SHA"; exit 2; }
+echo "[SOURCE] Minimal tabletop assets checked out; not the entire LIBERO benchmark."
 [[ -f "$SOURCE/LIBERO/setup.py" ]] || { echo "STOP: expected bundled LIBERO missing"; exit 2; }
 if [[ ! -x "$VENV/bin/python" ]]; then
   /root/miniconda3/bin/conda create -y -p "$VENV" python=3.10 pip
