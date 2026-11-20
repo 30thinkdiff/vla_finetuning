@@ -91,6 +91,14 @@ def sha256(path):
     return dig.hexdigest()
 
 
+def sdk_download_exact(api, *, repo_id, revision, path, target, upstream_sha256=None):
+    """Call the *public* modelscope-hub 0.4.5 API (no file_size argument)."""
+    return Path(api.download_file(
+        repo_id, "dataset", path, revision=revision,
+        local_dir=target, expected_sha256=upstream_sha256
+    ))
+
+
 def download(manifest, target, max_gib, api, receipt_id="snapshot"):
     from vla_finetuning.guards import require_gpu_idle, require_disk
     if manifest.get("kind") != "modelscope_recovery_exact_manifest_v1":
@@ -118,10 +126,10 @@ def download(manifest, target, max_gib, api, receipt_id="snapshot"):
     for x in checked["files"]:
         p = target/x["path"]
         if not p.is_file():
-            downloaded = Path(api.download_file(manifest["repo_id"], "dataset", x["path"],
-                                               revision=manifest["revision"],
-                                               local_dir=target,
-                                               expected_sha256=x.get("sha256")))
+            downloaded = sdk_download_exact(
+                api, repo_id=manifest["repo_id"], revision=manifest["revision"],
+                path=x["path"], target=target, upstream_sha256=x.get("sha256")
+            )
             if downloaded.resolve() != p.resolve():
                 raise ValueError("Unexpected SDK file destination")
         if not p.is_file() or p.stat().st_size != x["size_bytes"]:
