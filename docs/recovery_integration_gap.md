@@ -360,3 +360,28 @@ PYTHONPATH=src .venvs/train/bin/python scripts/smoke_recovery_processor.py \
 预期状态`REAL_PREPROCESSOR_SMOKE_PASS_NO_MODEL_WEIGHTS`，输出`camera1/camera2 [1,3,256,256]`、state `[1,8]`、action `[1,50,7]`、mask `[1,50]`、批量语言token。真实状态/动作已经应用**对应预训练checkpoint的**均值标准差，但这只验证旧统计可加载，不代表其适合Recovery训练分布。后续LoRA需明确是否采用训练集统计重算策略并同步保存预处理/反归一化。
 
 **脚本必须离线、必须有完整来源收据：** `config.json`、`policy_preprocessor.json`、normalizer safetensors及receipt、Tokenizer文件和receipt。缺失时STOP，不会自动下载任何缺失项或加载/更新网络模型。无法通过ModelProcessor的计算不允许标记模型已训练。
+
+## 2026-11-20：真实Episode末尾Padding/Normalizer/Tokenizer完成，训练环境Python门槛
+
+用户真实AutoDL终端Episode 0/frame620的`REAL_RECOVERY_PILOT_SAMPLE_BUILT_NO_TRAINING`已通过：帧620–628共9步有效，剩余41步Action Chunk clamp至628并正确`action_is_pad=True`；输出NPZ SHA256为`ff84b655a4637088f716564b33600c769949ab5be2e38f008db4f6e469380dac`。
+
+固定SmolVLA模型SHA `a24f1f380461b665158d52acd140152c79e8b36d`的Normalizer统计Safetensors已通过受限hf-mirror工具下载（5676 bytes, SHA256 `b0cdde6e8a6f49a8e19eefb376728e47c09d3b3cc20ce3a97c45619fe7a732d9`）。VLM Tokenizer `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`自身镜像SHA `4cde9d208e19519c36917aa170fffc7e381aa0ad`的7个配置与词表文件也下载成功。都保留来源、哈希收据，**尚未由真实LeRobot Processor加载**。
+
+用户的`.venvs/train`无Python可执行文件，显示`TRAIN_ENV_NOT_READY`；这只是未安装，不表示上面数据失败。**源码修正（重要）**：固定LeRobot提交`7e241bd630a3719a56157a497ce5d08f244784f1`的真实`pyproject.toml`是**LeRobot 0.6.1、Python>=3.12、numpy>=2,<2.3**。此前`.venvs/data`安装过`cp310`的NumPy1.26.4，它必须保留作纯数据环境，不能拿来安装此固定LeRobot，也不能使用Corrector环境。
+
+修复`scripts/bootstrap_train_env.sh`：`--apply`的最前面检查候选Python>=3.12，不达标会在任何目录写入/安装前STOP；允许`VLA_TRAIN_PYTHON`显式选择Python3.12/3.13解释器；原来的`[peft]`安装项改为固定源的`[smolvla,peft,dataset]`，从而包含SmolVLA必需的Transformers/Num2words/Accelerate、LeRobot dataset、PyArrow、PyAV等依赖。**注意安装会下载大量PyTorch/CUDA依赖，并保留 >=50GiB可用空间及GPU无占用等门槛；不可在没有查看硬件/环境的情况下直接执行`--apply`**。
+
+新增无副作用诊断：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+python scripts/preflight_recovery_train_env.py
+bash scripts/bootstrap_train_env.sh
+```
+
+若有Python3.12候选，按`bootstrap`提示使用选定解释器及显式CPU/IO同意；若不存在，独立新建`conda` Python3.12环境，例`/root/miniconda3/bin/conda create -p /root/autodl-tmp/vla_finetuning/.venvs/train python=3.12 pip -y`（此动作需要安装授权、下载和磁盘），再将`VLA_TRAIN_PYTHON`指定为`/root/autodl-tmp/vla_finetuning/.venvs/train/bin/python`。不得把3.10的data venv迁移到训练目录。
+
+安装完成并通过`pip check`、`import torch, lerobot, transformers, peft, pyarrow, av`后再运行`scripts/smoke_recovery_processor.py`，并指定已下载的本地Normalizer/Tokenizer真实目录。未运行此smoke与模型权重前向/反向之前，仍处于`ready_to_train=false`。
