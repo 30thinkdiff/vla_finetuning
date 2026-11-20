@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from recovery_hub import inventory_from_remote, exact_manifest, safe_path, write_new
+from recovery_hub import inventory_from_remote, exact_manifest, safe_path, write_new, sdk_download_exact
 
 
 class FakeAPI:
@@ -53,6 +53,21 @@ class RecoveryHubTests(unittest.TestCase):
         for rev in ("master", "main", "latest"):
             with self.assertRaises(ValueError):
                 inventory_from_remote("ataier/LIBERO_Recovery_Expert", rev, FakeAPI())
+
+    def test_modelscope_hub_public_download_signature(self):
+        class PublicAPIOnly:
+            def download_file(self, repo_id, repo_type, file_path, *,
+                              revision=None, local_dir=None, expected_sha256=None):
+                assert repo_id == "ataier/LIBERO_Recovery_Expert"
+                assert repo_type == "dataset"
+                assert file_path == "meta/info.json"
+                assert revision == "frozen-tag"
+                assert expected_sha256 is None
+                return Path(local_dir) / file_path
+        output = sdk_download_exact(
+            PublicAPIOnly(), repo_id="ataier/LIBERO_Recovery_Expert",
+            revision="frozen-tag", path="meta/info.json", target=self.path.parent)
+        self.assertEqual(output, self.path.parent / "meta/info.json")
 
     def test_write_new_never_overwrites(self):
         write_new(self.path, self.inv)
