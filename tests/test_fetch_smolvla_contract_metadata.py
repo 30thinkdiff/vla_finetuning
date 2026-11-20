@@ -50,6 +50,28 @@ class FetchSmolVLATests(unittest.TestCase):
             get_bounded("https://example.test",opener=lambda *args,**kwargs:FakeResponse(b"abcdef"),max_bytes=5)
 
 
+    def test_mirror_endpoint_pinned_and_receipted(self):
+        sha = "b"*40
+        urls = []
+        def fake_getter(url):
+            urls.append(url)
+            if url.endswith("/api/models/lerobot/smolvla_libero"):
+                return json.dumps({"sha": sha}).encode()
+            return b'{"ok":true}'
+        revision, files = gather_contract(getter=fake_getter, endpoint="https://hf-mirror.com")
+        self.assertEqual(revision, sha)
+        self.assertTrue(all(u.startswith("https://hf-mirror.com/") for u in urls))
+        self.assertEqual(len(urls), 3)
+        with tempfile.TemporaryDirectory() as temp:
+            dest, receipt = materialize(temp, revision, files, endpoint="https://hf-mirror.com")
+            self.assertTrue(receipt["source_is_third_party_mirror"])
+            self.assertEqual(receipt["source_endpoint"], "https://hf-mirror.com")
+            self.assertTrue((dest/"receipt.json").exists())
+        with self.assertRaises(ValueError):
+            gather_contract(getter=fake_getter, endpoint="http://hf-mirror.com")
+        with self.assertRaises(ValueError):
+            gather_contract(getter=fake_getter, endpoint="https://attacker.example")
+
     @patch("fetch_smolvla_contract_metadata.shutil.which", return_value="/usr/bin/curl")
     @patch("fetch_smolvla_contract_metadata.subprocess.run")
     def test_curl_ipv4_uses_safe_http_options_and_proxy_modes(self, run, which):
