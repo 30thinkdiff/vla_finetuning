@@ -248,3 +248,28 @@ python scripts/fetch_smolvla_contract_metadata.py \
 ```
 
 如果curl仅在`--noproxy '*'`时访问成功，使用`--transport curl-ipv4-direct`。若两者皆失败，先修复网络，**不能跳过远端固定版本/来源证明**。
+
+## 2026-11-20：HF 443双路径失败，改为受控镜像（网络降级）
+
+用户2号机的 `getent ahostsv4 huggingface.co` 输出 `199.193.116.105`，`curl -4` 在默认代理环境和 `--noproxy '*'` 时均超时HTTP 000。外部公开DNS在2026-11月记录`3.167.112.x`，**解析不同但不能断言DNS劫持**；同时还可能是出站443网络限制。不要改写全局 `/etc/hosts` 或禁用TLS校验。
+
+新的 `fetch_smolvla_contract_metadata.py` 支持 `--endpoint https://hf-mirror.com`，并保留 `--transport curl-ipv4` 和 `--transport curl-ipv4-direct`。先测试：
+
+```bash
+curl -4 -L -sS --connect-timeout 8 --max-time 20 -o /dev/null \
+  -w 'HTTP=%{http_code} URL=%{url_effective}\n' \
+  https://hf-mirror.com/api/models/lerobot/smolvla_libero
+```
+
+如HTTP 200，更新Recovery分支后仅下载两个小JSON：
+
+```bash
+python scripts/fetch_smolvla_contract_metadata.py \
+  --out-root models/smolvla_libero_contract \
+  --endpoint https://hf-mirror.com \
+  --allow-network --transport curl-ipv4
+```
+
+**注意**：`hf-mirror.com`是第三方镜像。工具只允许官网或固定HTTPS镜像域名，保留40位SHA和逐文件哈希，以及 `source_endpoint/source_is_third_party_mirror` 字段；此SHA由镜像报告，**不能视为官方独立签名校验**。如镜像回源到被阻断的 `huggingface.co`，仍会失败。此时优先验证ModelScope上同名checkpoint的精确来源/文件哈希，不得把 `HuggingFaceVLA/smolvla_libero` 未证实的版本冒充 `lerobot/smolvla_libero`。
+
+无需重新下载已完成验证的三条Recovery Episode。
