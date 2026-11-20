@@ -31,12 +31,33 @@ export PIP_CACHE_DIR="$ROOT/.cache/pip"
 export XDG_CACHE_HOME="$ROOT/.cache"
 export OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
 mkdir -p "$ROOT/vendor" "$ROOT/.venvs" "$PIP_CACHE_DIR"
+# An interrupted TLS fetch leaves a valid but EMPTY .git directory.
+# Resume safely instead of assuming that .git implies a checked-out commit.
 if [[ ! -d "$SOURCE/.git" ]]; then
+  [[ ! -e "$SOURCE" ]] || { echo "STOP: source path exists but is not a Git repository"; exit 2; }
   mkdir "$SOURCE"
   git -C "$SOURCE" init
-  git -C "$SOURCE" remote add origin https://github.com/liulin815/LIBERO-Recovery.git
-  git -C "$SOURCE" fetch --depth 1 origin "$SHA"
-  git -C "$SOURCE" checkout --detach FETCH_HEAD
+fi
+if [[ "$(git -C "$SOURCE" rev-parse --verify HEAD 2>/dev/null || true)" != "$SHA" ]]; then
+  # The user's main vla_finetuning repo can fetch from GitHub; try SSH first
+  # in non-interactive mode, which avoids the observed HTTPS GnuTLS failure.
+  # A separate HTTPS/HTTP1.1 fallback covers hosts without SSH credentials.
+  echo "[SOURCE] Resume incomplete pinned Recovery checkout; SSH first, HTTPS fallback."
+  success=0
+  if GIT_TERMINAL_PROMPT=0 \
+     GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=12 -o ServerAliveInterval=20" \
+     git -C "$SOURCE" fetch --depth 1 git@github.com:liulin815/LIBERO-Recovery.git "$SHA"; then
+    success=1
+  else
+    echo "[SOURCE] SSH fetch failed; retry pinned revision via HTTPS HTTP/1.1."
+    if GIT_TERMINAL_PROMPT=0 \
+       git -C "$SOURCE" -c http.version=HTTP/1.1 \
+       fetch --depth 1 https://github.com/liulin815/LIBERO-Recovery.git "$SHA"; then
+      success=1
+    fi
+  fi
+  [[ "$success" == 1 ]] || { echo "STOP: both GitHub transports failed; no conda environment or model touched"; exit 2; }
+  git -C "$SOURCE" checkout --detach "$SHA"
 fi
 [[ "$(git -C "$SOURCE" rev-parse HEAD)" == "$SHA" ]] || { echo "STOP: Recovery SHA mismatch"; exit 2; }
 [[ -f "$SOURCE/LIBERO/setup.py" ]] || { echo "STOP: expected bundled LIBERO missing"; exit 2; }
