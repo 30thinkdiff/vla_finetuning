@@ -229,3 +229,22 @@ python scripts/audit_recovery_smolvla_contract.py \
 输出\`STATIC_FEATURE_BRIDGE_PROPOSED_NOT_TRAIN_READY\`是**正确状态**，它验证字段形状和checkpoint Processor的静态命名兼容性，并明确输出桥接建议。该脚本不会实际加载权重、Tokenizer、视频或生成真实训练Batch，更不会进行LoRA训练。下一步需要使用固定LeRobot和SmolVLA真实模型，检查Processor Pipeline、RGB通道/转置、图像方向、state/action标准化权重文件、任务Tokenization和动作chunk padding/恢复接口。
 
 注意**预训练Checkpoint自带的Mean/Std统计来自原LIBERO训练分布**。Recovery后训练的训练归一化策略必须固定，并在M0/M1/M2评测中保证正确逆归一化。绝对不能直接将\`meta/stats_gr00t.json\`称为SmolVLA的预处理统计。静态合同检查为\`ready_to_train=false\`是预期结果。
+
+## 2026-11-20：AutoDL请求HF时`Errno 99`网络故障处理
+
+真实2号机使用`python scripts/fetch_smolvla_contract_metadata.py --allow-network`返回`<urlopen error [Errno 99] Cannot assign requested address>`，发生在Python urllib对`huggingface.co`联网阶段，**不能据此推断模型不存在或数据不兼容**。常见原因IPv6/代理/源地址选择，需先检测实际连接。
+
+```bash
+curl -4 -L -sS --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}\n' https://huggingface.co/api/models/lerobot/smolvla_libero
+curl -4 --noproxy '*' -L -sS --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}\n' https://huggingface.co/api/models/lerobot/smolvla_libero
+```
+
+已添加`--transport curl-ipv4`（优先尊重当前代理）或`--transport curl-ipv4-direct`（明确绕过代理）；二者使用Curl自身连接机制，不依赖Python urllib，固定模型SHA后才下载两个小JSON，保留2MiB单文件限额与不覆盖文件原则。升级当前Recovery分支后执行：
+
+```bash
+python scripts/fetch_smolvla_contract_metadata.py \
+  --out-root models/smolvla_libero_contract \
+  --allow-network --transport curl-ipv4
+```
+
+如果curl仅在`--noproxy '*'`时访问成功，使用`--transport curl-ipv4-direct`。若两者皆失败，先修复网络，**不能跳过远端固定版本/来源证明**。
