@@ -97,7 +97,9 @@ def validate_model_files(model_dir, tokenizer_dir):
     for name, info in tokenizer_receipt.get("files", {}).items():
         if name not in ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json",
                         "added_tokens.json", "vocab.json", "merges.txt", "tokenizer.model",
-                        "sentencepiece.bpe.model", "config.json"):
+                        "sentencepiece.bpe.model", "config.json",
+                        "preprocessor_config.json", "processor_config.json",
+                        "chat_template.json", "generation_config.json"):
             raise ProcessorSmokeError("Unexpected tokenizer receipt file")
         if (not (tokenizer_dir/name).is_file()
                 or file_sha256(tokenizer_dir/name) != info.get("sha256")):
@@ -107,7 +109,7 @@ def validate_model_files(model_dir, tokenizer_dir):
     return model_dir, tokenizer_dir, state, receipt
 
 
-def process_offline(sample, report_path, model_dir, tokenizer_dir):
+def process_offline(sample, report_path, model_dir, tokenizer_dir, *, return_batch=False):
     # Set before any transformers/huggingface_hub import: fail closed if assets missing.
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
@@ -194,7 +196,7 @@ def process_offline(sample, report_path, model_dir, tokenizer_dir):
     for key in ("observation.state", "action", "observation.images.camera1", "observation.images.camera2"):
         if not torch.isfinite(result[key]).all():
             raise ProcessorSmokeError("Nonfinite processed values: "+key)
-    return {
+    summary = {
         "status":"REAL_PREPROCESSOR_SMOKE_PASS_NO_MODEL_WEIGHTS",
         "ready_to_train":False,
         "sample_npz_sha256":file_sha256(path),
@@ -210,6 +212,10 @@ def process_offline(sample, report_path, model_dir, tokenizer_dir):
         "valid_action_steps":50-pad_count,
         "note":"Real LeRobot preprocessor/tokenizer/normalizer exercised, but no SmolVLA policy forward/backward, controller semantics or training.",
     }
+    if return_batch:
+        # For a single-batch GPU diagnostic only; do not serialize large tensors.
+        return summary, result
+    return summary
 
 
 def main(argv=None):
