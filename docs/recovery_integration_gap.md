@@ -464,3 +464,38 @@ PYTHONPATH=src .venvs/train/bin/python scripts/smoke_recovery_optimizer_reload.p
 预期`REAL_SMOLVLA_LORA_ONE_OPTIMIZER_STEP_SAVE_RELOAD_PASS`，`optimizer_steps=1`、`updated_lora_tensors>0`、`max_abs_reload_parameter_difference<=1e-6`且adapter仅含保存的PEFT配置及Safetensors。**无长训、无自适应训练，不能将一次optimizer step称作完成训练。**
 
 随后的正式方法学关卡：Recovery Expert动作是否与LIBERO预训练策略的坐标系/旋转和gripper开闭一致；相机是否方向正确；预训练状态/动作归一化对Recovery分布可能存在偏移，需冻结训练集再计算stats且保留评测反归一化；多Episode/v3 DatasetLoader训练方案；在held-out failure scenes上比较M0/M1/M2。
+
+
+## 2026-11-20：P5真实4090一次optimizer step + Adapter保存重载PASS，转P6统计/语义审核
+
+用户真实运行`scripts/smoke_recovery_optimizer_reload.py`返回`REAL_SMOLVLA_LORA_ONE_OPTIMIZER_STEP_SAVE_RELOAD_PASS`：
+
+- RTX 4090、固定`lerobot/smolvla_libero` rev `a24f1f380461b665158d52acd140152c79e8b36d`、完整基础权重SHA256 `9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8`；真实Recovery Ep0/Frame10 NPZ SHA256 `8558bbe07553c8e7fc51dbe8533aab9ca90a897425ce9af1afd3136ac9c890bf`。
+- AdamW**确实执行一次**，lr=1e-4；clip前梯度范数11.55256，裁剪上限1.0。371,328可训练LoRA参数、74梯度张量中37非零；更新37个张量、188,855个参数元素；最大更新绝对值约1.00000005e-4。
+- Adapter-only保存：74个Safetensors张量；从原始基础Checkpoint**重新构建模型**并加载Adapter后逐项比对差值最大0.0。`initial_loss=9.857237815856934`仅为优化**之前**单样本随机Flow Matching Loss；无after-step Loss，无成功率，无完整训练/闭环。
+- 生成的Adapter在`runs/recovery_batch/ep0_f10_one_step_adapter`，**仅是单步烟雾测试产物，不应作为正式M1模型或用于科研结果比较**。
+
+**P6 新增只读归一化分布审计：** `scripts/audit_recovery_normalization_distribution.py`。加载真实已验证的ModelScope Expert Ep0/15/30 Parquet数据及固定预训练LeRobot Normalizer的MEAN_STD stats，逐维输出checkpoint/pilot均值/标准差、p95绝对标准化值、|z|>3与|z|>5比例。报告字段明确`ready_for_formal_training=false`。该诊断不修改数据/统计、不执行GPU、不认为Pilot3能代表全体3,184条Expert。
+
+操作：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+
+EXPERT_SHA=2804e989adfb49cdde9b5c04bc7e0fb9f4fbfc73
+MODEL_SHA=a24f1f380461b665158d52acd140152c79e8b36d
+TOK_SHA=4cde9d208e19519c36917aa170fffc7e381aa0ad
+
+PYTHONPATH=src .venvs/train/bin/python scripts/audit_recovery_normalization_distribution.py \
+  --dataset-root "datasets/recovery_expert/$EXPERT_SHA" \
+  --manifest "runs/recovery_pilot3_manifest_$EXPERT_SHA.json" \
+  --model-dir "models/smolvla_libero_contract/$MODEL_SHA" \
+  --vlm-runtime-dir "models/smolvlm2_runtime/$TOK_SHA" \
+  --episodes 0,15,30 \
+  --out "runs/recovery_pilot3_normalization_audit_${EXPERT_SHA}.json"
+```
+
+检查每维`p95_abs_z`及`fraction_abs_z_gt_3`：异常值只能提示**与预训练统计分布不同**，不能得出坐标系/动作语义一致或不一致的结论。下一步必须由Recovery官方生成/控制源代码确认7D动作平移、旋转、gripper开合及观测EEF状态的定义；之后用真实FailureScenes官方Evaluator做M0闭环。不能仅凭单步Loss决定启动长训。
