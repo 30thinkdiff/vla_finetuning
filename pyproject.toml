@@ -13,7 +13,8 @@ dependencies = []
 learning = ["torch"]
 metadata = ["huggingface_hub"]
 downloads = ["huggingface_hub", "pyarrow"]
-recovery = ["modelscope"]
+recovery = ["modelscope", "modelscope-hub==0.4.5"]
+recovery_inventory = ["modelscope-hub==0.4.5"]
 # Do not install LeRobot into the Corrector runtime. Pin it in a dedicated venv.
 
 [tool.setuptools.packages.find]
@@ -22,3 +23,4 @@ where = ["src"]
 [project.scripts]
 vla-study = "vla_finetuning.cli:main"
 vla-pipeline = "vla_finetuning.pipeline:main"
+vla-recovery = "vla_finetuning.recovery_cli:main"

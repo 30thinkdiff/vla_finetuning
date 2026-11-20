@@ -1,0 +1,29 @@
+{
+  "kind": "recovery_alignment_v1",
+  "verified": false,
+  "purpose": "TEMPLATE ONLY - schema gate, not evidence of real source compatibility",
+  "target_dataset_id": "REPLACE_WITH_UNIQUE_LOCAL_V3_DATASET_ID",
+  "metadata_paths": {
+    "ataier/LIBERO_Recovery_Expert": "REPLACE_WITH_REAL_EXPERT_META_INFO_PATH",
+    "lerobot/libero": "REPLACE_WITH_REAL_NORMAL_META_INFO_PATH"
+  },
+  "camera_features": {
+    "ataier/LIBERO_Recovery_Expert": {
+      "front": "REPLACE_WITH_OBSERVED_EXPERT_CAMERA_KEY",
+      "wrist": "REPLACE_WITH_OBSERVED_EXPERT_CAMERA_KEY"
+    },
+    "lerobot/libero": {
+      "front": "REPLACE_WITH_OBSERVED_NORMAL_CAMERA_KEY",
+      "wrist": "REPLACE_WITH_OBSERVED_NORMAL_CAMERA_KEY"
+    }
+  },
+  "evidence": {
+    "gripper": "TBD: measured dataset 0/1 to env +-1 conversion",
+    "action_coordinates": "TBD: axis and rotation semantics from real sample",
+    "state_order": "TBD: each of 8 state fields",
+    "camera_transforms": "TBD: image flip/color/order for policy and sim",
+    "timebase": "TBD: observed FPS, timestamps, controller step",
+    "normalization": "TBD: processor stats for both sources",
+    "task_labels": "TBD: task text and IDs mapping"
+  }
+}

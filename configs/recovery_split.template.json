@@ -1,0 +1,23 @@
+{
+  "kind": "recovery_source_split_v1",
+  "purpose": "TEMPLATE ONLY. STOP until real source_scene to expert_episode provenance audited.",
+  "real_evidence_reviewed": false,
+  "datasets": {
+    "ataier/LIBERO_Recovery_Expert": {
+      "revision": "REPLACE_WITH_PINNED_MODELSCOPE_REVISION",
+      "source_identity_checked": false
+    },
+    "lerobot/libero": {
+      "revision": "REPLACE_WITH_PINNED_HF_REVISION",
+      "source_identity_checked": false
+    }
+  },
+  "reserved_benchmark_source_groups": [
+    "REPLACE_WITH_REAL_RESERVED_SCENE_GROUPS"
+  ],
+  "splits": {
+    "train": [],
+    "validation": [],
+    "test": []
+  }
+}

@@ -1,0 +1,58 @@
+name: Package pinned Recovery M0 sparse source
+on:
+  push:
+    branches:
+      - feature/recovery-p0-offline-foundation-20261119
+    paths:
+      - .github/workflows/recovery_m0_bundle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m0-source-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch pinned upstream code plus the exact tabletop task assets
+        uses: actions/checkout@v4
+        with:
+          repository: liulin815/LIBERO-Recovery
+          ref: 832d54dfc43f0c9e4240bb8d92f5fda7001bb093
+          path: upstream
+          filter: blob:none
+          sparse-checkout-cone-mode: true
+          sparse-checkout: |
+            LIBERO/libero/libero/envs
+            LIBERO/libero/libero/utils
+            LIBERO/libero/libero/benchmark
+            LIBERO/libero/libero/bddl_files
+            LIBERO/libero/configs
+            LIBERO/libero/libero/assets/textures
+            LIBERO/libero/libero/assets/scenes/desk
+            LIBERO/libero/libero/assets/articulated_objects/meshes
+            LIBERO/libero/libero/assets/stable_hope_objects/ketchup
+            LIBERO/libero/libero/assets/stable_scanned_objects/basket
+          persist-credentials: false
+      - name: Verify exact commit and package checkout with Git metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream rev-parse HEAD)" = "832d54dfc43f0c9e4240bb8d92f5fda7001bb093"
+          test -f upstream/LIBERO/setup.py
+          test -f upstream/LIBERO/libero/libero/assets/stable_hope_objects/ketchup/ketchup.xml
+          test -f upstream/LIBERO/libero/libero/assets/stable_scanned_objects/basket/basket.xml
+          mkdir -p dist
+          tar -czf dist/recovery-m0-sparse-832d54d.tar.gz -C upstream .
+          (cd dist && sha256sum recovery-m0-sparse-832d54d.tar.gz > recovery-m0-sparse-832d54d.tar.gz.sha256)
+          du -h dist/*
+      - name: Upload artifact (reusable without rebuilding)
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-m0-sparse-832d54d
+          path: |
+            dist/recovery-m0-sparse-832d54d.tar.gz
+            dist/recovery-m0-sparse-832d54d.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
