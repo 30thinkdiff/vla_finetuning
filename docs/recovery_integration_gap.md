@@ -273,3 +273,41 @@ python scripts/fetch_smolvla_contract_metadata.py \
 **注意**：`hf-mirror.com`是第三方镜像。工具只允许官网或固定HTTPS镜像域名，保留40位SHA和逐文件哈希，以及 `source_endpoint/source_is_third_party_mirror` 字段；此SHA由镜像报告，**不能视为官方独立签名校验**。如镜像回源到被阻断的 `huggingface.co`，仍会失败。此时优先验证ModelScope上同名checkpoint的精确来源/文件哈希，不得把 `HuggingFaceVLA/smolvla_libero` 未证实的版本冒充 `lerobot/smolvla_libero`。
 
 无需重新下载已完成验证的三条Recovery Episode。
+
+## 2026-11-20：静态SmolVLA契约真实通过，推进CPU真实训练Batch样本
+
+用户在AutoDL通过镜像HTTPS获取`lerobot/smolvla_libero`模型配置，镜像报告版本`a24f1f380461b665158d52acd140152c79e8b36d`，`config.json` sha256 `3ed3ed80ee077d94ff22942130642bb60e255443ee65da676bc88ab1684a7efe`，`policy_preprocessor.json` sha256 `7beef33479fc22c9a45670154b3c7b909fb6d51dac3cd6db6f23376638b4ac11`，都由用户终端校验。
+
+真实运行`audit_recovery_smolvla_contract.py`得到`STATIC_FEATURE_BRIDGE_PROPOSED_NOT_TRAIN_READY`：Expert两路视频原始键`observation.images.image`、`observation.images.wrist_image`，模型目标`observation.images.camera1`、`observation.images.camera2`；预训练Processor要求`image2 -> camera2`，新增的临时桥接`wrist_image -> image2`只能执行一次；8D state、7D action、`chunk_size=50`、`n_action_steps=50`、`STATE/ACTION=MEAN_STD`在静态维度上匹配。镜像SHA还需官方一致性复核。
+
+新增`src/vla_finetuning/recovery_batch.py`与`scripts/build_recovery_pilot_batch.py`：读取SHA校验后的真实Expert v2.1 Parquet＋两路AV1视频（CPU FFmpeg按帧编号精确选择），将一帧RGB转为两个CHW float32 [0,1]输入，输出8维原始state、[50,7]未归一化动作、[50]`action_is_pad`（LeRobot `DatasetReader._get_query_indices`的Episode边界clamp规则）、真实task字符串和验证收据。**不跨Episode、不删除原数据、不写Hub、不加载模型/Processor/Normalizer、不占GPU**。输出仅作样本桥接/测试，不能作为已训练Batch。
+
+操作（先确认分支与git工作区干净，更新分支）：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+EXPERT_REV=2804e989adfb49cdde9b5c04bc7e0fb9f4fbfc73
+MODEL_REV=a24f1f380461b665158d52acd140152c79e8b36d
+DATA="$PWD/datasets/recovery_expert/$EXPERT_REV"
+MANIFEST="runs/recovery_pilot3_manifest_$EXPERT_REV.json"
+CONTRACT="runs/recovery_smolvla_contract_${EXPERT_REV}_${MODEL_REV}.json"
+PYTHONPATH=src .venvs/data/bin/python scripts/build_recovery_pilot_batch.py \
+  --dataset-root "$DATA" --manifest "$MANIFEST" --contract "$CONTRACT" \
+  --episode 0 --frame 10 \
+  --out-npz runs/recovery_batch/ep0_f10.npz \
+  --out-report runs/recovery_batch/ep0_f10.json
+
+# Episode 0 has 629 frames; f620 starts 9 valid and 41 padded actions:
+PYTHONPATH=src .venvs/data/bin/python scripts/build_recovery_pilot_batch.py \
+  --dataset-root "$DATA" --manifest "$MANIFEST" --contract "$CONTRACT" \
+  --episode 0 --frame 620 \
+  --out-npz runs/recovery_batch/ep0_f620.npz \
+  --out-report runs/recovery_batch/ep0_f620.json
+```
+
+Expected in first report: `valid_action_steps=50, action_is_pad_true_count=0`; in f620 report: `valid_action_steps=9, action_is_pad_true_count=41`. The `.npz` has keys `observation.images.image`, `observation.images.image2`, `observation.state`, `action`, `action_is_pad`, `task` and can be loaded with NumPy `allow_pickle=False`. The two camera arrays each have shape `[3,256,256]` float32 [0,1], state `[8]` and action `[50,7]`.
+
+After this: implement/run actual pinned LeRobot+SmolVLA Processor/Tokenizer/Normalizer weight loading, action control semantic cross-check, real GPU forward/backward and LoRA optimizer; **none of those is yet validated**.
