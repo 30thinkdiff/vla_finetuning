@@ -4,10 +4,12 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
-from fetch_smolvla_contract_metadata import gather_contract, materialize, get_bounded
+from fetch_smolvla_contract_metadata import gather_contract, materialize, get_bounded, get_bounded_curl_ipv4
 
 
 class FakeResponse:
@@ -46,6 +48,34 @@ class FetchSmolVLATests(unittest.TestCase):
             gather_contract(opener=opener)
         with self.assertRaises(ValueError):
             get_bounded("https://example.test",opener=lambda *args,**kwargs:FakeResponse(b"abcdef"),max_bytes=5)
+
+
+    @patch("fetch_smolvla_contract_metadata.shutil.which", return_value="/usr/bin/curl")
+    @patch("fetch_smolvla_contract_metadata.subprocess.run")
+    def test_curl_ipv4_uses_safe_http_options_and_proxy_modes(self, run, which):
+        run.return_value = SimpleNamespace(stdout=b'{"sha":"'+b'a'*40+b'"}')
+        data = get_bounded_curl_ipv4(
+            "https://huggingface.co/api/models/lerobot/smolvla_libero")
+        self.assertIn(b"a"*40, data)
+        args = run.call_args.args[0]
+        self.assertIn("--ipv4", args)
+        self.assertIn("--fail", args)
+        self.assertNotIn("--noproxy", args)
+        get_bounded_curl_ipv4(
+            "https://huggingface.co/api/models/lerobot/smolvla_libero", direct=True)
+        args = run.call_args.args[0]
+        self.assertEqual(args[args.index("--noproxy")+1], "*")
+
+    @patch("fetch_smolvla_contract_metadata.shutil.which", return_value="/usr/bin/curl")
+    @patch("fetch_smolvla_contract_metadata.subprocess.run")
+    def test_curl_ipv4_rejects_wrong_host_and_oversize(self, run, which):
+        with self.assertRaises(ValueError):
+            get_bounded_curl_ipv4("https://untrusted.example/secret")
+        run.return_value = SimpleNamespace(stdout=b"x"*7)
+        with self.assertRaises(ValueError):
+            get_bounded_curl_ipv4(
+                "https://huggingface.co/api/models/lerobot/smolvla_libero",
+                max_bytes=6)
 
 
 if __name__=="__main__":
