@@ -84,3 +84,54 @@ PYTHONPATH=src .venvs/data/bin/python scripts/recovery_hub.py download \
 注意：下载器为防IO影响其他GPU训练，仍有GPU空闲检查。上述\`download\`的大小预算为远端目录估计，不是底层流式字节上限。根据目录只有约0.054 GiB整体总量，一组文件的网络成本很小。
 
 下载后用户下一步工作是**实际建立隔离的Recovery Python3.10模拟器**及策略桥接，不能重用有Python冲突的\`bootstrap_sim_env.sh\`。优先实现单场景真实\`env.reset\`/\`set_init_state\`、一次\`env.step\`，然后接通M0，而不是继续重复Expert小样本统计。
+
+
+## 2026-11-20：真实小场景下载 PASS；M0官方Recovery仿真脚本准备完成
+
+用户实际下载三个文件并获SHA验证成功，固定FailureScenes revision:
+\`95acf98dd41a4965018069e7e4f27aac1fc69328\`。固定选中场景
+\`scenes/libero_object/pick_up_the_ketchup_and_place_it_in_the_basket/episode_018/step_0080.bddl\`
+及相邻 \`step_0080_sim_state.npy\`；包含 \`index/selection.jsonl\`。收据在
+\`datasets/recovery_failure_scenes/95acf98dd41a4965018069e7e4f27aac1fc69328/.vla_recovery_verified_m0_object_s7.json\`。实际大小与SHA一致：索引5927592B、BDDL3237B、NPY1008B。该候选是**模型链路工程示例，不是无泄漏科学测试集**。
+
+**新增两个核心实物准备脚本：**
+- \`scripts/bootstrap_recovery_sim_env.sh\`：单独Python3.10+NumPy1.24.4+MuJoCo3.2.3+robosuite1.4.1，clone并锁定\`liulin815/LIBERO-Recovery@832d54d...\`完整Git工作树，安装该仓库自带\`LIBERO\`包。不触碰现有train/data/Corrector venv，**默认dry-run，--apply需显式CPU/IO批准**。首次clone约230MB Git仓库加环境依赖。
+- \`scripts/bringup_recovery_sim.py\`：确认单个场景收据、Git revision与所有场景SHA；在EGL离屏模拟器中按官方位置重置，\`set_init_state\`恢复.npy，重设OSC控制目标，执行**唯一一次零臂增量+张开夹爪**动作，记录状态与实际场景交互；**这不是M0策略运行**，不得宣称success rate。默认拒绝运行，需\`--allow-one-step\`。
+
+**还发现且修复推理前漏下的两份必要文件**：原模型仓库确有\`policy_postprocessor.json\`以及\`policy_postprocessor_step_0_unnormalizer_processor.safetensors\`。原先只获取了训练用的preprocessor stats，尚无法安全输出物理单位动作。新\`scripts/fetch_smolvla_postprocessor_assets.py\`从同一冻结model SHA经明确授权下载两份小文件并验收JSON/安全Tensor头，写独立收据；绝不能把归一化后的\`policy.select_action\`直接送到MuJoCo。
+
+用户下一步实际命令：
+
+\`\`\`bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+
+# 模型后处理器资产（两份tiny文件；不重下载907MB模型）
+MODEL_SHA=a24f1f380461b665158d52acd140152c79e8b36d
+python scripts/fetch_smolvla_postprocessor_assets.py \
+  --model-dir "models/smolvla_libero_contract/$MODEL_SHA" \
+  --endpoint https://hf-mirror.com \
+  --transport curl-ipv4 --allow-network
+
+# 模拟器独立环境：先预览；确认GPU空闲、空间充足后再安装
+bash scripts/bootstrap_recovery_sim_env.sh
+VLA_APPROVED_CPU_IO=YES bash scripts/bootstrap_recovery_sim_env.sh --apply
+
+# 一个真实失败状态的仿真复位+1步，只会创建新的结果报告
+SCENE_SHA=95acf98dd41a4965018069e7e4f27aac1fc69328
+RECOVERY_SHA=832d54dfc43f0c9e4240bb8d92f5fda7001bb093
+SOURCE="$PWD/vendor/LIBERO-Recovery-$RECOVERY_SHA"
+MUJOCO_GL=egl PYOPENGL_PLATFORM=egl \
+ PYTHONPATH="$SOURCE/LIBERO:$SOURCE" .venvs/recovery_sim/bin/python \
+ scripts/bringup_recovery_sim.py \
+ --manifest "runs/recovery_m0_object_scene_$SCENE_SHA.json" \
+ --scene-root "$PWD/datasets/recovery_failure_scenes/$SCENE_SHA" \
+ --recovery-source "$SOURCE" \
+ --seed 7 \
+ --out "runs/recovery_m0_object_scene_sim_bringup_$SCENE_SHA.json" \
+ --allow-one-step
+\`\`\`
+
+以上脚本已提交和CPU代码单元测试，**AutoDL上的真实安装/仿真未执行**。如果本地运行有环境错误，按原始报错修复，不要静默换用StarVLA服务端或pip升级训练环境。仿真运行之后，实施真正的多进程SmolVLA动作服务接口，再运行一个M0闭环并记录Trace与录像。
