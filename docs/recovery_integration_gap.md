@@ -385,3 +385,51 @@ bash scripts/bootstrap_train_env.sh
 若有Python3.12候选，按`bootstrap`提示使用选定解释器及显式CPU/IO同意；若不存在，独立新建`conda` Python3.12环境，例`/root/miniconda3/bin/conda create -p /root/autodl-tmp/vla_finetuning/.venvs/train python=3.12 pip -y`（此动作需要安装授权、下载和磁盘），再将`VLA_TRAIN_PYTHON`指定为`/root/autodl-tmp/vla_finetuning/.venvs/train/bin/python`。不得把3.10的data venv迁移到训练目录。
 
 安装完成并通过`pip check`、`import torch, lerobot, transformers, peft, pyarrow, av`后再运行`scripts/smoke_recovery_processor.py`，并指定已下载的本地Normalizer/Tokenizer真实目录。未运行此smoke与模型权重前向/反向之前，仍处于`ready_to_train=false`。
+
+## 2026-11-20：真实预处理Processor成功，转单Batch GPU LoRA Smoke
+
+用户AutoDL的Conda Python 3.12独立训练环境已完成真实安装，固定LeRobot 0.6.1、Torch 2.11.0+cu130、PEFT 0.21.3、Transformers 5.5.4，`pip check`无broken requirements。用户真实运行`scripts/smoke_recovery_processor.py`返回`REAL_PREPROCESSOR_SMOKE_PASS_NO_MODEL_WEIGHTS`：双相机 `[1,3,256,256]`，state `[1,8]`、action `[1,50,7]`、pad mask `[1,50]`、language tokens/mask `[1,48]`。这属于**真实离线Processor成功，不是模型权重前向**。
+
+官方`lerobot/smolvla_libero`模型主仓库历史已交叉核对：版本`a24f1f380461b665158d52acd140152c79e8b36d`，`model.safetensors`约907MB；官方文件页公开SHA256 `9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8`。权重必须从本repo、同修订下载；**禁止替换成`HuggingFaceVLA/smolvla_libero`的1.22GB权重**。
+
+固定源码`SmolVLMWithExpertModel`初始化时会调用`AutoConfig.from_pretrained(config.vlm_model_name)`及`AutoProcessor.from_pretrained(...)`；单独的Tokenzier还缺`preprocessor_config.json`, `processor_config.json`, `chat_template.json`。新增`scripts/fetch_smolvlm2_runtime_assets.py`从**原Tokenzier版本SHA**下载这3个小文件，并写到**新建目录**（不改已有7文件/收据），用作离线模型初始化。预训练SmolVLA模型本身已有VLM权重，设`load_vlm_weights=False`，只从本地加载一次SmolVLA策略权重，不必再下载2GB基础VLM。
+
+成功回归测试后可按顺序执行，尽量逐块复制：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+
+MODEL_SHA=a24f1f380461b665158d52acd140152c79e8b36d
+TOK_SHA=4cde9d208e19519c36917aa170fffc7e381aa0ad
+MODEL_DIR="models/smolvla_libero_contract/$MODEL_SHA"
+TOK_DIR="models/smolvlm2_tokenizer/$TOK_SHA"
+
+# 轻量级处理器配置：追加完整局部运行时到NEW dir（不是VLM权重）
+python scripts/fetch_smolvlm2_runtime_assets.py \
+  --tokenizer-dir "$TOK_DIR" \
+  --out-root models/smolvlm2_runtime \
+  --endpoint https://hf-mirror.com \
+  --transport curl-ipv4 --allow-network
+
+# 大文件：显式授权、断点续传、从同一SHA下载907MB、验证官方公开文件哈希
+python scripts/fetch_smolvla_policy_weights.py \
+  --model-dir "$MODEL_DIR" \
+  --endpoint https://hf-mirror.com \
+  --allow-large-download
+
+# 真实1个Batch，BF16 CUDA，默认只forward/backward，不更新权重
+PYTHONPATH=src .venvs/train/bin/python scripts/smoke_recovery_lora_gpu.py \
+  --sample runs/recovery_batch/ep0_f10.npz \
+  --sample-report runs/recovery_batch/ep0_f10.json \
+  --model-dir "$MODEL_DIR" \
+  --vlm-runtime-dir "models/smolvlm2_runtime/$TOK_SHA" \
+  --out runs/recovery_batch/ep0_f10_lora_gpu_smoke.json \
+  --allow-gpu-smoke
+```
+
+GPU检查硬门槛：CUDA可用、BF16可用、至少12GiB空闲显存、所有真实资产及其哈希/收据正确。使用官方SmolVLA`_get_default_peft_targets()`只训练LoRA(rank=8 alpha=16)，一次真实样本`forward + backward`且检查梯度有限且非零；**不执行optimizer.step、不保存权重、不跑长训或仿真**。成功状态`REAL_SMOLVLA_LORA_SINGLE_BATCH_FORWARD_BACKWARD_PASS`表示单Batch计算图打通，不表示训练收敛/部署正确或Recovery改善；不成功需保留原始错误排查，禁止把CPU测试当GPU验证。
+
+进一步正式训练仍需：控制语义（7D坐标/旋转/抓手、摄像头方向）的源代码交叉校验、训练集独立归一化统计和评测时正确反归一化、LeRobot v2.1到可用于固定LeRobot的数据集物化、多Episode采样、M0原模型评测与held-out Recovery closed-loop，之后才启动M1/M2。
