@@ -14,9 +14,11 @@ import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 MODEL = "lerobot/smolvla_libero"
+ALLOWED_ENDPOINTS = ("https://huggingface.co", "https://hf-mirror.com")
 JSON_FILES = ("config.json", "policy_preprocessor.json")
 MAX_METADATA_BYTES = 2 * 1024 * 1024
 
@@ -40,7 +42,9 @@ def get_bounded_curl_ipv4(url, *, direct=False, max_bytes=MAX_METADATA_BYTES):
     Honors environment proxy unless --curl-direct is selected. Only accepts
     HTTPS requests to Hugging Face and retains the same byte cap as urllib.
     """
-    if not url.startswith("https://huggingface.co/"):
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https" or parsed.netloc not in ("huggingface.co", "hf-mirror.com")
+            or parsed.username or parsed.password):
         raise ValueError("Unexpected contract endpoint")
     if not shutil.which("curl"):
         raise ValueError("curl is not installed; cannot use IPv4 fallback")
@@ -64,10 +68,12 @@ def get_bounded_curl_ipv4(url, *, direct=False, max_bytes=MAX_METADATA_BYTES):
     return output.stdout
 
 
-def gather_contract(*, opener=None, getter=None):
+def gather_contract(*, opener=None, getter=None, endpoint="https://huggingface.co"):
     if getter is None:
         getter = lambda url: get_bounded(url, opener=opener)
-    base = "https://huggingface.co"
+    if endpoint not in ALLOWED_ENDPOINTS:
+        raise ValueError("Unapproved Hugging Face metadata endpoint")
+    base = endpoint
     info = json.loads(getter(f"{base}/api/models/{MODEL}"))
     sha = info.get("sha")
     if not isinstance(sha, str) or not re.fullmatch("[0-9a-f]{40}", sha):
@@ -84,13 +90,17 @@ def gather_contract(*, opener=None, getter=None):
     return sha, files
 
 
-def materialize(out_root, sha, files):
+def materialize(out_root, sha, files, *, endpoint="https://huggingface.co"):
     root = Path(out_root).expanduser().resolve()/sha
     if root.exists() or root.is_symlink():
         raise ValueError("Destination revision already exists; refuse overwrite: "+str(root))
     root.mkdir(parents=True, exist_ok=False)
     manifest = {"status": "PINNED_MODEL_JSON_ONLY_NOT_MODEL_WEIGHTS",
-                "model_repo": MODEL, "revision": sha, "files": {}}
+                "model_repo": MODEL, "revision": sha, "source_endpoint": endpoint,
+                "source_is_third_party_mirror": endpoint != "https://huggingface.co",
+                "note": ("Third-party mirror metadata/commit is not independent proof of upstream parity"
+                         if endpoint != "https://huggingface.co" else "Official Hugging Face metadata"),
+                "files": {}}
     for name in JSON_FILES:
         item = files[name]
         with (root/name).open("xb") as fp:
@@ -109,6 +119,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-root", type=Path, required=True)
     parser.add_argument("--allow-network", action="store_true")
+    parser.add_argument("--endpoint", choices=ALLOWED_ENDPOINTS,
+                        default="https://huggingface.co", help="Exact approved Hub endpoint; mirror is third-party")
     parser.add_argument("--transport", choices=["urllib", "curl-ipv4", "curl-ipv4-direct"],
                         default="urllib", help="Use curl IPv4 if urllib fails; -direct bypasses proxies")
     args = parser.parse_args(argv)
@@ -116,11 +128,13 @@ def main(argv=None):
         parser.exit(2, "STOP: explicit --allow-network required\n")
     try:
         if args.transport == "urllib":
-            sha, files = gather_contract()
+            sha, files = gather_contract(endpoint=args.endpoint)
         else:
-            sha, files = gather_contract(getter=lambda url: get_bounded_curl_ipv4(
-                url, direct=args.transport == "curl-ipv4-direct"))
-        path, manifest = materialize(args.out_root, sha, files)
+            sha, files = gather_contract(
+                endpoint=args.endpoint,
+                getter=lambda url: get_bounded_curl_ipv4(
+                    url, direct=args.transport == "curl-ipv4-direct"))
+        path, manifest = materialize(args.out_root, sha, files, endpoint=args.endpoint)
         print(json.dumps({"path":str(path), **manifest}, indent=2, ensure_ascii=False))
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         parser.exit(2, "STOP: "+str(exc)+"\n")
