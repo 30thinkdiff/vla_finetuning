@@ -46,3 +46,41 @@ find datasets -maxdepth 3 -type d | head -n 50
 ```
 
 下一步**先生成FailureScenes inventory，再决定最小下载量**。不得把本计划当作已实现的M0模拟器或真实回合。
+
+
+## 2026-11-20：FailureScenes真实清单已获取，接下来只下载1组M0场景
+
+AutoDL用户已在独立数据环境\`.venvs/data\`安装\`modelscope-hub==0.4.5\`，并实际运行\`scripts/recovery_hub.py inventory\`，得到固定修订\`95acf98dd41a4965018069e7e4f27aac1fc69328\`、15,864文件、0.054 GiB清单。只是远端列表，**尚未下载场景/运行模拟器或M0**。
+
+新增纯标准库\`scripts/prepare_recovery_m0_scene.py\`，从清单里按suite和seed严格选一个完整的\`.bddl\`+\`_sim_state.npy\`配对，若\`index/selection.jsonl\`存在则一起纳入；只生成一个精确下载manifest。先用该小数据完成M0打通，**不能将这一个随机工程示例作为科学评测**。
+
+\`\`\`bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+
+SCENE_REV=95acf98dd41a4965018069e7e4f27aac1fc69328
+INV="runs/recovery_failure_scenes_inventory_$SCENE_REV.json"
+MANIFEST="runs/recovery_m0_object_scene_$SCENE_REV.json"
+ROOT="$PWD/datasets/recovery_failure_scenes/$SCENE_REV"
+
+python scripts/prepare_recovery_m0_scene.py \
+  --inventory "$INV" \
+  --suite libero_object \
+  --seed 7 \
+  --out "$MANIFEST"
+
+# 查看确切的文件条目，确认只有一个.bddl、一个_sim_state.npy及可选索引
+.venvs/data/bin/python scripts/recovery_hub.py download \
+  --manifest "$MANIFEST" --target "$ROOT" --max-gib 0.1
+
+# 显式同意下载时再执行：不需要也不允许下载80GB Rollouts
+PYTHONPATH=src .venvs/data/bin/python scripts/recovery_hub.py download \
+  --manifest "$MANIFEST" --target "$ROOT" --max-gib 0.1 \
+  --apply --receipt-id m0_object_s7
+\`\`\`
+
+注意：下载器为防IO影响其他GPU训练，仍有GPU空闲检查。上述\`download\`的大小预算为远端目录估计，不是底层流式字节上限。根据目录只有约0.054 GiB整体总量，一组文件的网络成本很小。
+
+下载后用户下一步工作是**实际建立隔离的Recovery Python3.10模拟器**及策略桥接，不能重用有Python冲突的\`bootstrap_sim_env.sh\`。优先实现单场景真实\`env.reset\`/\`set_init_state\`、一次\`env.step\`，然后接通M0，而不是继续重复Expert小样本统计。
