@@ -162,7 +162,9 @@ def audit(root, manifest_path, episodes, *, probe_videos=True):
         raise PayloadAuditError("Manifest does not contain all selected episode files")
     for relative in sorted(required):
         file = root/relative
-        if not file.is_file() or file.is_symlink() or file.resolve() != (root/relative).resolve():
+        if (not file.is_file() or file.is_symlink() or
+                any(part.is_symlink() for part in file.parents if part == root or root in part.parents) or
+                not file.resolve().is_relative_to(root)):
             raise PayloadAuditError("Missing/unsafe file: " + relative)
         record = records[relative]
         if file.stat().st_size != record["size_bytes"]:
