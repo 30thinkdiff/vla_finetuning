@@ -77,8 +77,33 @@ def validate_model_files(model_dir, tokenizer_dir):
     if not state.is_file() or state.stat().st_size == 0:
         raise ProcessorSmokeError(
             "Missing pinned normalizer stats "+str(state)+"; two JSON files alone are insufficient")
+    state_receipt_path = model_dir / "processor_state_receipt.json"
+    if not state_receipt_path.is_file():
+        raise ProcessorSmokeError("Missing pinned processor_state_receipt.json")
+    state_receipt = json.loads(state_receipt_path.read_text(encoding="utf-8"))
+    if (state_receipt.get("model_revision") != receipt["revision"]
+            or state_receipt.get("state_file") != norm[0]
+            or state_receipt.get("state_file_sha256") != file_sha256(state)):
+        raise ProcessorSmokeError("Normalizer state does not match pinned asset receipt")
     if not tokenizer_dir.is_dir() or not (tokenizer_dir/"tokenizer_config.json").is_file():
         raise ProcessorSmokeError("Local tokenizer directory with tokenizer_config.json is required")
+    tokenizer_receipt_path = tokenizer_dir / "receipt.json"
+    if not tokenizer_receipt_path.is_file():
+        raise ProcessorSmokeError("Missing pinned tokenizer receipt")
+    tokenizer_receipt = json.loads(tokenizer_receipt_path.read_text(encoding="utf-8"))
+    if (tokenizer_receipt.get("repo_id") != "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+            or tokenizer_receipt.get("revision") != tokenizer_dir.name):
+        raise ProcessorSmokeError("Wrong tokenizer model revision/source")
+    for name, info in tokenizer_receipt.get("files", {}).items():
+        if name not in ("tokenizer.json", "tokenizer_config.json", "special_tokens_map.json",
+                        "added_tokens.json", "vocab.json", "merges.txt", "tokenizer.model",
+                        "sentencepiece.bpe.model", "config.json"):
+            raise ProcessorSmokeError("Unexpected tokenizer receipt file")
+        if (not (tokenizer_dir/name).is_file()
+                or file_sha256(tokenizer_dir/name) != info.get("sha256")):
+            raise ProcessorSmokeError("Tokenizer assets failed receipt checksum: "+name)
+    if "tokenizer_config.json" not in tokenizer_receipt.get("files", {}):
+        raise ProcessorSmokeError("Tokenizer receipt missing tokenizer_config.json")
     return model_dir, tokenizer_dir, state, receipt
 
 
