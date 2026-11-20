@@ -44,7 +44,7 @@ class SmokeGateTests(unittest.TestCase):
             root=Path(tmp)
             model=root/("a"*40)
             model.mkdir()
-            tok=root/"tokenizer"
+            tok=root/("b"*40)
             tok.mkdir()
             (tok/"tokenizer_config.json").write_text("{}")
             blobs={"config.json":b'{"type":"smolvla"}',
@@ -61,6 +61,16 @@ class SmokeGateTests(unittest.TestCase):
                 validate_model_files(model,tok)
             sf=model/"policy_preprocessor_step_5_normalizer_processor.safetensors"
             sf.write_bytes(b"dummy")
+            (model/"processor_state_receipt.json").write_text(json.dumps({
+                "model_revision":model.name,"state_file":sf.name,
+                "state_file_sha256":hashlib.sha256(b"dummy").hexdigest()
+            }))
+            tblob=(tok/"tokenizer_config.json").read_bytes()
+            (tok/"receipt.json").write_text(json.dumps({
+                "repo_id":"HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+                "revision":tok.name,
+                "files":{"tokenizer_config.json":{"sha256":hashlib.sha256(tblob).hexdigest()}}
+            }))
             _, _, found, _=validate_model_files(model,tok)
             self.assertEqual(found,sf)
             (model/"config.json").write_bytes(b"changed")
