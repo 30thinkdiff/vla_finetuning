@@ -189,3 +189,43 @@ PYTHONPATH=src .venvs/data/bin/python scripts/audit_recovery_payload.py \
 **不能由此认定动作物理单位/坐标系/缩放已核实**。Episode 30前三维动作范围分别约[-0.517,0.447]、[-0.812,0.659]、[-0.696,0.822]，这很可能不是直接以米表示的单步物理位移；必须根据原始遥操作转换、MuJoCo控制器逻辑和状态差分进行交叉验证。状态最后两维连续、正负值可能对应双抓手关节坐标，不能将其误当作动作开合二值。
 
 **下一硬阻塞为六个AV1 MP4尚未实际解码**：输出两路相机均为`NOT_PROBED`。若远端机器缺少`ffprobe`，可以在原始数据不受影响的前提下安装ffmpeg/ffprobe，再以**新的**JSON报告路径重跑审计。视频通过后，还须输出相机前/中/末帧供可视检查方向及动作-观测对应。三条任务文本虽然不同，但均是cabinet top drawer相关示教，不能据此宣称跨Suite覆盖。没有实际SmolVLA处理器/训练Batch或Recovery闭环结果；仍不得启动正式长训。
+
+
+## 2026-11-20：P1首批视频全帧验证完成，开始SmolVLA静态合同检查
+
+用户在2号机执行ffprobe对Episode 0/15/30的前视、腕部六个AV1 MP4均得到PASS；对应629、796、647帧。加上之前Parquet序号/20Hz、SHA256和PNG单帧抽取，**P1首批样本的数据文件完整性验证已完成**，但仅限这三条Episode；不是整个3,184条数据的审核，也不代表训练和执行语义通过。
+
+经核对Hugging Face模型真实公开配置（模型仓库版本仍须独立固定），\`lerobot/smolvla_libero\`的\`input_features\`期望：
+- \`observation.state\` [8]；
+- \`observation.images.camera1\`和\`observation.images.camera2\` [3,256,256]；
+- \`action\` [7]；
+- 模型默认chunk_size=50、n_action_steps=50；
+- 预处理器rename映射原图像键\`observation.images.image → observation.images.camera1\`和\`observation.images.image2 → observation.images.camera2\`。
+
+而**真实Recovery Expert**第二相机键是\`observation.images.wrist_image\`，不是\`observation.images.image2\`。需要在使用预训练Processor**前**显式进行\`observation.images.wrist_image → observation.images.image2\`（或经严格验证后修改Processor的rename配置）；不可同时做两次映射，也不可默认会自动适配。动作/状态shape虽然兼容，动作坐标和数值归一化仍未证实。
+
+新增**只读**脚本：
+
+\`\`\`bash
+cd /root/autodl-tmp/vla_finetuning
+git fetch origin
+# 仅在工作区无改动且当前分支是recovery-p0时：
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+
+# 仅获取模型的两个小JSON，**不下载权重**，Hugging Face API自动固定40位SHA
+python scripts/fetch_smolvla_contract_metadata.py \
+  --out-root models/smolvla_libero_contract --allow-network
+
+# 从上条命令path值填入，以实际SHA为准
+MODEL_CONTRACT_DIR="models/smolvla_libero_contract/实际40位SHA"
+EXPERT_REV=2804e989adfb49cdde9b5c04bc7e0fb9f4fbfc73
+python scripts/audit_recovery_smolvla_contract.py \
+  --expert-info "datasets/recovery_expert/$EXPERT_REV/meta/info.json" \
+  --policy-config "$MODEL_CONTRACT_DIR/config.json" \
+  --policy-preprocessor "$MODEL_CONTRACT_DIR/policy_preprocessor.json" \
+  --out "runs/recovery_smolvla_static_contract_$EXPERT_REV.json"
+\`\`\`
+
+输出\`STATIC_FEATURE_BRIDGE_PROPOSED_NOT_TRAIN_READY\`是**正确状态**，它验证字段形状和checkpoint Processor的静态命名兼容性，并明确输出桥接建议。该脚本不会实际加载权重、Tokenizer、视频或生成真实训练Batch，更不会进行LoRA训练。下一步需要使用固定LeRobot和SmolVLA真实模型，检查Processor Pipeline、RGB通道/转置、图像方向、state/action标准化权重文件、任务Tokenization和动作chunk padding/恢复接口。
+
+注意**预训练Checkpoint自带的Mean/Std统计来自原LIBERO训练分布**。Recovery后训练的训练归一化策略必须固定，并在M0/M1/M2评测中保证正确逆归一化。绝对不能直接将\`meta/stats_gr00t.json\`称为SmolVLA的预处理统计。静态合同检查为\`ready_to_train=false\`是预期结果。
