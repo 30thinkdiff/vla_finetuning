@@ -499,3 +499,11 @@ PYTHONPATH=src .venvs/train/bin/python scripts/audit_recovery_normalization_dist
 ```
 
 检查每维`p95_abs_z`及`fraction_abs_z_gt_3`：异常值只能提示**与预训练统计分布不同**，不能得出坐标系/动作语义一致或不一致的结论。下一步必须由Recovery官方生成/控制源代码确认7D动作平移、旋转、gripper开合及观测EEF状态的定义；之后用真实FailureScenes官方Evaluator做M0闭环。不能仅凭单步Loss决定启动长训。
+
+## 2026-11-20：P6真实分布审计PASS；官方评测协议交叉核对
+
+用户实际执行新`audit_recovery_normalization_distribution.py`输出`REAL_EXPERT_PILOT_NORMALIZATION_DISTRIBUTION_AUDITED_NOT_SEMANTICALLY_VERIFIED`，2072帧，Episode 0/15/30分别629/796/647帧。按冻结SmolVLA预训练Normalizer的p95|z|：state=[1.213,1.556,1.234,**4.290**,2.153,**3.199**,1.828,1.705]，action=[0.947,1.496,1.390,**5.647**,2.555,1.740,1.051]（维度从D1编号；D4数组index3）。这些是**95分位绝对z值**，不是95%帧越界、不是控制语义错误的证明。**正式训练仍blocked**。
+
+已固定官方LIBERO-Recovery开源评测代码提交`liulin815/LIBERO-Recovery@832d54dfc43f0c9e4240bb8d92f5fda7001bb093`，核对：评测输入视图两个图像都按[::-1,::-1]做180°旋转；评测状态拼接EEF pos3+quat2axisangle3+gripper qpos2；策略回传动作pos delta3+rotation delta3+open_gripper1；环境夹爪+1为close/-1为open，评测记录转换为数据集0close/1open。**这是评测回合的转换代码，不能宣称Expert发布数据必定用了同一个录制/转换流程；也不能对已解码的视频贸然再旋转。** 详细来源及风险审查见`docs/recovery_control_semantics_audit_20261120.md`。
+
+下一只读证据步骤：从现有P6全JSON中抽取每Episode state D4/D6、action D4的checkpoint mean/std、Pilot均值/方差、p95|z|及|z|>3比例，区分均值漂移和尺度漂移；之后审查Expert真实采集/转换来源代码并开展M0官方FailureScenes闭环。不要直接以Pilot3重算正式Normalizer。
