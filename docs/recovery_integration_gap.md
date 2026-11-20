@@ -15,7 +15,7 @@ git ls-remote https://www.modelscope.cn/datasets/ataier/LIBERO_Recovery_FailureS
 
 # Recovery-Aware SmolVLA：集成缺口与可执行验收顺序
 
-**状态：P0 静态实现/纯CPU合同检查。没有真实Recovery样本或GPU训练/闭环验证。**
+**当前状态（2026-11-20）：P5已真实通过**——3条Recovery Expert Episode文件与视频验收、真实LeRobot预训练Processor、RTX4090上的单Batch SmolVLA LoRA前向/反向、一次AdamW参数更新，以及PEFT Adapter保存/独立重新加载逐张量一致性均已完成。**尚未完成正式训练、控制语义验证、归一化策略选择或Recovery闭环评测。** 文档以下早期P0/P1记录为历史状态，不能代表当前进度。
 与正在运行的Corrector训练隔离；不要修改 \`/root/autodl-tmp/corrector\`。
 
 ## 来源核查已确认：Expert优先按LeRobot v2.1准备（2026-11-19）
