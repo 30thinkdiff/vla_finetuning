@@ -51,6 +51,7 @@ def get_bounded_curl_ipv4(url, *, direct=False, max_bytes=MAX_METADATA_BYTES):
     args = [
         "curl", "--ipv4", "--fail", "--location", "--silent", "--show-error",
         "--connect-timeout", "10", "--max-time", "35", "--retry", "2",
+        "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "4",
         "--max-filesize", str(max_bytes),
     ]
     if direct:
