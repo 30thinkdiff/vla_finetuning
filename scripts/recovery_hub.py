@@ -120,7 +120,7 @@ def download(manifest, target, max_gib, api, receipt_id="snapshot"):
         if not p.is_file():
             downloaded = Path(api.download_file(manifest["repo_id"], "dataset", x["path"],
                                                revision=manifest["revision"],
-                                               local_dir=target, file_size=x["size_bytes"],
+                                               local_dir=target,
                                                expected_sha256=x.get("sha256")))
             if downloaded.resolve() != p.resolve():
                 raise ValueError("Unexpected SDK file destination")
