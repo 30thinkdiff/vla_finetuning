@@ -1,6 +1,7 @@
 """Opt-in ModelScope Recovery inventory, exact bounded downloads; stdlib until network.
 
-External dependency for network operations: modelscope-hub>=0.4.5.
+External dependency for network operations: modelscope-hub==0.4.5.
+Install it in the isolated data/tool Python environment, not the model-training venv.
 No GPU/model/simulator use. Remote sizes are budget estimates, NOT hard
 streaming caps; SHA256 receipt and size verified after each file transfer.
 """
@@ -205,7 +206,11 @@ def main(argv=None):
         else:
             raise AssertionError("unreachable")
         print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
-    except (ImportError, KeyError, TypeError, OSError, ValueError) as exc:
+    except ImportError as exc:
+        if "modelscope_hub" in str(exc):
+            p.exit(2, "STOP: ModelScope inventory dependency missing. Use .venvs/data/bin/python -m pip install \"modelscope-hub==0.4.5\" and rerun with .venvs/data/bin/python. No changes needed to .venvs/train.\n")
+        p.exit(2, "STOP: missing required dependency: "+str(exc)+"\n")
+    except (KeyError, TypeError, OSError, ValueError) as exc:
         p.exit(2, "STOP: "+str(exc)+"\n")
 
 
