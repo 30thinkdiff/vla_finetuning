@@ -13,7 +13,8 @@ dependencies = []
 learning = ["torch"]
 metadata = ["huggingface_hub"]
 downloads = ["huggingface_hub", "pyarrow"]
-recovery = ["modelscope"]
+recovery = ["modelscope", "modelscope-hub==0.4.5"]
+recovery_inventory = ["modelscope-hub==0.4.5"]
 # Do not install LeRobot into the Corrector runtime. Pin it in a dedicated venv.
 
 [tool.setuptools.packages.find]
