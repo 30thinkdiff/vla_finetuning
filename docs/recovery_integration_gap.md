@@ -433,3 +433,34 @@ PYTHONPATH=src .venvs/train/bin/python scripts/smoke_recovery_lora_gpu.py \
 GPU检查硬门槛：CUDA可用、BF16可用、至少12GiB空闲显存、所有真实资产及其哈希/收据正确。使用官方SmolVLA`_get_default_peft_targets()`只训练LoRA(rank=8 alpha=16)，一次真实样本`forward + backward`且检查梯度有限且非零；**不执行optimizer.step、不保存权重、不跑长训或仿真**。成功状态`REAL_SMOLVLA_LORA_SINGLE_BATCH_FORWARD_BACKWARD_PASS`表示单Batch计算图打通，不表示训练收敛/部署正确或Recovery改善；不成功需保留原始错误排查，禁止把CPU测试当GPU验证。
 
 进一步正式训练仍需：控制语义（7D坐标/旋转/抓手、摄像头方向）的源代码交叉校验、训练集独立归一化统计和评测时正确反归一化、LeRobot v2.1到可用于固定LeRobot的数据集物化、多Episode采样、M0原模型评测与held-out Recovery closed-loop，之后才启动M1/M2。
+
+## 2026-11-20：真实RTX4090 SmolVLA LoRA forward/backward验收通过，转优化器单步及重载
+
+AutoDL用户真实运行`scripts/smoke_recovery_lora_gpu.py`，输出`REAL_SMOLVLA_LORA_SINGLE_BATCH_FORWARD_BACKWARD_PASS`。样本Episode0/frame10、50×7动作、语言token `[1,48]`，固定`lerobot/smolvla_libero` rev `a24f1f380461b665158d52acd140152c79e8b36d`，完整权重SHA256 `9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8`。GPU `RTX 4090`（23.52 GiB），torch `2.11.0+cu130`，LoRA rank8/alpha16，可训练371,328个参数、74梯度张量、其中37非零。单样本一次stochastic Flow Matching Loss `9.857237815856934`，torch峰值显存1.319 GiB。**没有执行优化器更新/训练收敛/任何rollout，损失值不能表示模型质量或Recovery改进。**
+
+训练日志的`Training SmolVLA from scratch using PEFT`警告来自`SmolVLAPolicy._validate_peft_config`仅检查`config.load_vlm_weights`标志，**不是模型未加载预训练权重**。我们使用`load_vlm_weights=False`以跳过单独加载另一个VLM基础checkpoint，然后用`SmolVLAPolicy.from_pretrained(..., strict=True)`从已校验907MB预训练SmolVLA Policy文件加载全量权重，故在此调用路径下警告具有误导性。首轮74个LoRA梯度中37个非零也可能是LoRA零初始化B矩阵造成，不能自动认定网络断梯度；应后续检验optimizer.step后哪些参数真的变化。
+
+已新增`scripts/smoke_recovery_optimizer_reload.py`进行**一次且仅一次**AdamW(lr1e-4, wd0)更新（BF16 autocast、clip grad norm1.0），验证至少一个LoRA张量真的改变、无非有限值；仅保存PEFT adapter（不保存/覆盖基础Policy）；丢弃模型后从原始预训练权重全新加载，再从本地PEFT adapter文件恢复LoRA，并逐张量检查差异<=1e-6。**此脚本CPU CI通过，但尚未在用户GPU运行验证**。
+
+操作（确认当前`recovery-p0`工作树干净并更新）：
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+nvidia-smi
+
+PYTHONPATH=src .venvs/train/bin/python scripts/smoke_recovery_optimizer_reload.py \
+  --sample runs/recovery_batch/ep0_f10.npz \
+  --sample-report runs/recovery_batch/ep0_f10.json \
+  --model-dir models/smolvla_libero_contract/a24f1f380461b665158d52acd140152c79e8b36d \
+  --vlm-runtime-dir models/smolvlm2_runtime/4cde9d208e19519c36917aa170fffc7e381aa0ad \
+  --adapter-dir runs/recovery_batch/ep0_f10_one_step_adapter \
+  --out runs/recovery_batch/ep0_f10_one_step_report.json \
+  --allow-one-step
+```
+
+预期`REAL_SMOLVLA_LORA_ONE_OPTIMIZER_STEP_SAVE_RELOAD_PASS`，`optimizer_steps=1`、`updated_lora_tensors>0`、`max_abs_reload_parameter_difference<=1e-6`且adapter仅含保存的PEFT配置及Safetensors。**无长训、无自适应训练，不能将一次optimizer step称作完成训练。**
+
+随后的正式方法学关卡：Recovery Expert动作是否与LIBERO预训练策略的坐标系/旋转和gripper开闭一致；相机是否方向正确；预训练状态/动作归一化对Recovery分布可能存在偏移，需冻结训练集再计算stats且保留评测反归一化；多Episode/v3 DatasetLoader训练方案；在held-out failure scenes上比较M0/M1/M2。
