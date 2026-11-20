@@ -49,11 +49,19 @@ if [[ "$(git -C "$SOURCE" rev-parse --verify HEAD 2>/dev/null || true)" != "$SHA
      git -C "$SOURCE" fetch --depth 1 git@github.com:liulin815/LIBERO-Recovery.git "$SHA"; then
     success=1
   else
-    echo "[SOURCE] SSH fetch failed; retry pinned revision via HTTPS HTTP/1.1."
+    echo "[SOURCE] SSH port 22 failed; try GitHub SSH over port 443."
     if GIT_TERMINAL_PROMPT=0 \
-       git -C "$SOURCE" -c http.version=HTTP/1.1 \
-       fetch --depth 1 https://github.com/liulin815/LIBERO-Recovery.git "$SHA"; then
+       GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=12 -p 443" \
+       git -C "$SOURCE" fetch --depth 1 \
+       ssh://git@ssh.github.com:443/liulin815/LIBERO-Recovery.git "$SHA"; then
       success=1
+    else
+      echo "[SOURCE] SSH port 443 failed; retry via HTTPS HTTP/1.1."
+      if GIT_TERMINAL_PROMPT=0 \
+         git -C "$SOURCE" -c http.version=HTTP/1.1 \
+         fetch --depth 1 https://github.com/liulin815/LIBERO-Recovery.git "$SHA"; then
+        success=1
+      fi
     fi
   fi
   [[ "$success" == 1 ]] || { echo "STOP: both GitHub transports failed; no conda environment or model touched"; exit 2; }
