@@ -10,6 +10,8 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 import urllib.request
 from pathlib import Path
 
@@ -32,16 +34,48 @@ def get_bounded(url, *, opener=None, max_bytes=MAX_METADATA_BYTES):
     return data
 
 
-def gather_contract(*, opener=None):
+def get_bounded_curl_ipv4(url, *, direct=False, max_bytes=MAX_METADATA_BYTES):
+    """Use curl's IPv4 transport when urllib's connection fails in some containers.
+
+    Honors environment proxy unless --curl-direct is selected. Only accepts
+    HTTPS requests to Hugging Face and retains the same byte cap as urllib.
+    """
+    if not url.startswith("https://huggingface.co/"):
+        raise ValueError("Unexpected contract endpoint")
+    if not shutil.which("curl"):
+        raise ValueError("curl is not installed; cannot use IPv4 fallback")
+    args = [
+        "curl", "--ipv4", "--fail", "--location", "--silent", "--show-error",
+        "--connect-timeout", "10", "--max-time", "35", "--retry", "2",
+        "--max-filesize", str(max_bytes),
+    ]
+    if direct:
+        args.extend(["--noproxy", "*"])
+    args.append(url)
+    try:
+        output = subprocess.run(args, capture_output=True, check=True, timeout=90)
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.decode("utf-8", errors="replace")[-400:]
+        raise OSError("Hugging Face curl IPv4 request failed: " + detail) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise OSError("Hugging Face curl IPv4 request timed out") from exc
+    if len(output.stdout) > max_bytes:
+        raise ValueError("Downloaded JSON exceeds metadata size limit")
+    return output.stdout
+
+
+def gather_contract(*, opener=None, getter=None):
+    if getter is None:
+        getter = lambda url: get_bounded(url, opener=opener)
     base = "https://huggingface.co"
-    info = json.loads(get_bounded(f"{base}/api/models/{MODEL}", opener=opener))
+    info = json.loads(getter(f"{base}/api/models/{MODEL}"))
     sha = info.get("sha")
     if not isinstance(sha, str) or not re.fullmatch("[0-9a-f]{40}", sha):
         raise ValueError("Hugging Face API returned no usable 40-character commit SHA")
     files = {}
     for name in JSON_FILES:
         url = f"{base}/{MODEL}/resolve/{sha}/{name}"
-        blob = get_bounded(url, opener=opener)
+        blob = getter(url)
         parsed = json.loads(blob)
         if not isinstance(parsed, dict):
             raise ValueError("Malformed model contract JSON: " + name)
@@ -75,11 +109,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-root", type=Path, required=True)
     parser.add_argument("--allow-network", action="store_true")
+    parser.add_argument("--transport", choices=["urllib", "curl-ipv4", "curl-ipv4-direct"],
+                        default="urllib", help="Use curl IPv4 if urllib fails; -direct bypasses proxies")
     args = parser.parse_args(argv)
     if not args.allow_network:
         parser.exit(2, "STOP: explicit --allow-network required\n")
     try:
-        sha, files = gather_contract()
+        if args.transport == "urllib":
+            sha, files = gather_contract()
+        else:
+            sha, files = gather_contract(getter=lambda url: get_bounded_curl_ipv4(
+                url, direct=args.transport == "curl-ipv4-direct"))
         path, manifest = materialize(args.out_root, sha, files)
         print(json.dumps({"path":str(path), **manifest}, indent=2, ensure_ascii=False))
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
