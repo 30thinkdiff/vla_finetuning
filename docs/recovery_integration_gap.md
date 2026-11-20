@@ -180,3 +180,12 @@ PYTHONPATH=src .venvs/data/bin/python scripts/audit_recovery_payload.py \
 `ffprobe`在PATH中可用时自动解码验证全部6个MP4；否则生成`VIDEO_PROBE_PENDING`状态，必须之后安装合适AV1解码器、复跑到新的报告名，不能将缺失检查视为通过。核查使用`pyarrow`，不需要Torch或CUDA。
 
 即便3条Episode都检查通过：**动作究竟是相对控制还是绝对控制、旋转轴角的具体计算方式、抓手0/1编码、训练视频的翻转与归一化、Expert来源场景关联仍未验收**。不得直接启动M1长训。
+
+
+## 2026-11-20：3条真实Parquet数值审计回传
+
+用户提供的`audit_recovery_payload.py`服务器输出：`VIDEO_PROBE_PENDING`，`total_parquet_rows=2072`。Episode 0/15/30分别为629/796/647行，序号从0开始连续，`task_index`分别0/1/2，时间戳0～31.4、0～39.75、0～32.3秒；20Hz名义0.05秒时间间隔的偏差约在3.05e-6秒以内。全部7维Action与8维State数值均为有限值，动作第7维在三条Episode里都只出现0/1。
+
+**不能由此认定动作物理单位/坐标系/缩放已核实**。Episode 30前三维动作范围分别约[-0.517,0.447]、[-0.812,0.659]、[-0.696,0.822]，这很可能不是直接以米表示的单步物理位移；必须根据原始遥操作转换、MuJoCo控制器逻辑和状态差分进行交叉验证。状态最后两维连续、正负值可能对应双抓手关节坐标，不能将其误当作动作开合二值。
+
+**下一硬阻塞为六个AV1 MP4尚未实际解码**：输出两路相机均为`NOT_PROBED`。若远端机器缺少`ffprobe`，可以在原始数据不受影响的前提下安装ffmpeg/ffprobe，再以**新的**JSON报告路径重跑审计。视频通过后，还须输出相机前/中/末帧供可视检查方向及动作-观测对应。三条任务文本虽然不同，但均是cabinet top drawer相关示教，不能据此宣称跨Suite覆盖。没有实际SmolVLA处理器/训练Batch或Recovery闭环结果；仍不得启动正式长训。
