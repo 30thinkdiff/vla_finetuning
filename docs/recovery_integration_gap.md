@@ -1,3 +1,18 @@
+## 2026-11-20 ModelScope只列出master的处理方式
+
+ModelScope `HubApi().list_repo_revisions(dataset, "dataset")` 只列出branch/tag，可能对Expert和FailureScenes都仅返回`master`。**不能把`REV=master`直接交给已启用防漂移检查的`recovery_hub.py inventory`**。
+
+优先使用远端Git引用只读解析真实HEAD commit（不会下载大文件）：
+
+```bash
+git ls-remote https://www.modelscope.cn/datasets/ataier/LIBERO_Recovery_Expert.git refs/heads/master
+git ls-remote https://www.modelscope.cn/datasets/ataier/LIBERO_Recovery_FailureScenes.git refs/heads/master
+```
+
+用各自对应的40位SHA分别执行`inventory --revision <SHA>`；不能混用两个Repo的SHA。若远端不支持该SHA查询API，**先停下**，不要通过删掉`master`检查伪称不可变版本。接下来考虑人工审计master时刻的树指纹、文件Blob/SHA和下载前后清单比对，但那是独立的降级模式，尚未实现。
+
+另外，已依据**已安装的modelscope-hub v0.4.5**公共`HubApi.download_file` API修正旧脚本：它接受`repo_id, repo_type, file_path, revision, local_dir, expected_sha256`，但**不接受`file_size`**。对应纯CPU回归测试覆盖该参数签名。若运行2号机的分支早于这次修复，先`git fetch`并更新到最新分支，否则下载可能因TypeError失败。
+
 # Recovery-Aware SmolVLA：集成缺口与可执行验收顺序
 
 **状态：P0 静态实现/纯CPU合同检查。没有真实Recovery样本或GPU训练/闭环验证。**
