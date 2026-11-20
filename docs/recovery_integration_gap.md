@@ -311,3 +311,52 @@ PYTHONPATH=src .venvs/data/bin/python scripts/build_recovery_pilot_batch.py \
 Expected in first report: `valid_action_steps=50, action_is_pad_true_count=0`; in f620 report: `valid_action_steps=9, action_is_pad_true_count=41`. The `.npz` has keys `observation.images.image`, `observation.images.image2`, `observation.state`, `action`, `action_is_pad`, `task` and can be loaded with NumPy `allow_pickle=False`. The two camera arrays each have shape `[3,256,256]` float32 [0,1], state `[8]` and action `[50,7]`.
 
 After this: implement/run actual pinned LeRobot+SmolVLA Processor/Tokenizer/Normalizer weight loading, action control semantic cross-check, real GPU forward/backward and LoRA optimizer; **none of those is yet validated**.
+
+
+## 2026-11-20：首次真实样本已生成；下一阶段仅离线Processor smoke
+
+用户已使用真实Episode 0第10帧执行新脚本并得到`REAL_RECOVERY_PILOT_SAMPLE_BUILT_NO_TRAINING`。原始样本：两路RGB `[3,256,256]` float32 `[0,1]`、状态`[8]`、动作`[50,7]`、`action_is_pad`全False、任务`put the black bowl in the top drawer of the cabinet`、来源文件哈希与NPZ SHA已记录；NPZ SHA256 `8558bbe07553c8e7fc51dbe8533aab9ca90a897425ce9af1afd3136ac9c890bf`。先前缺少NumPy，已由用户在数据venv安装`numpy==1.26.4`成功修复。
+
+**注意实际LeRobot源码细节：** `AddBatchDimensionActionStep`仅为1D action自动补Batch维度，单样本`[50,7]`不会自动变成`[1,50,7]`。新`smoke_recovery_processor.py`会在调用预训练Processor前显式对动作和`action_is_pad`增加B维，而保持相机CHW和状态8D未批处理，交给官方`AddBatchDimensionObservationStep`操作。检查双相机映射、真实Tokenizer、真实预处理Normalize状态，不允许缺失统计文件时静默跳过。
+
+**此处对外网络只需很小的辅助资产，训练Checkpoint权重仍不下载：**
+
+```bash
+cd /root/autodl-tmp/vla_finetuning
+git status -sb
+git fetch origin
+git merge --ff-only origin/feature/recovery-p0-offline-foundation-20261119
+MODEL_REV=a24f1f380461b665158d52acd140152c79e8b36d
+MODEL_DIR="models/smolvla_libero_contract/$MODEL_REV"
+
+# 仅下载该SmolVLA版本的preprocessor normalizer safetensors文件
+python scripts/fetch_smolvla_processor_state.py \
+  --model-dir "$MODEL_DIR" \
+  --endpoint https://hf-mirror.com \
+  --transport curl-ipv4 --allow-network
+
+# 仅下载SmolVLM2 tokenizer相关文件，额外用Model Hub SHA固定版本；不下载模型权重
+python scripts/fetch_smolvla_tokenizer.py \
+  --out-root models/smolvlm2_tokenizer \
+  --endpoint https://hf-mirror.com \
+  --transport curl-ipv4 --allow-network
+```
+
+第二个命令输出本地`path`，例如`models/smolvlm2_tokenizer/<actual_40_char_sha>`；务必使用**实际输出SHA**，不要假设它等于SmolVLA策略SHA。
+
+同时完成之前承诺的Episode 0尾部Padding测试（第620帧仅9步有效、41步补齐）以证明不串Episode。两个例子都属于CPU读取样本，可在`.venvs/data`执行。
+
+只有在`.venvs/train`已安装固定版LeRobot、Torch、Transformers和Tokenizer依赖后才执行：
+
+```bash
+PYTHONPATH=src .venvs/train/bin/python scripts/smoke_recovery_processor.py \
+  --sample runs/recovery_batch/ep0_f10.npz \
+  --sample-report runs/recovery_batch/ep0_f10.json \
+  --model-dir "$MODEL_DIR" \
+  --tokenizer-dir models/smolvlm2_tokenizer/<actual_40_char_sha> \
+  --out runs/recovery_batch/ep0_f10_processor_smoke.json
+```
+
+预期状态`REAL_PREPROCESSOR_SMOKE_PASS_NO_MODEL_WEIGHTS`，输出`camera1/camera2 [1,3,256,256]`、state `[1,8]`、action `[1,50,7]`、mask `[1,50]`、批量语言token。真实状态/动作已经应用**对应预训练checkpoint的**均值标准差，但这只验证旧统计可加载，不代表其适合Recovery训练分布。后续LoRA需明确是否采用训练集统计重算策略并同步保存预处理/反归一化。
+
+**脚本必须离线、必须有完整来源收据：** `config.json`、`policy_preprocessor.json`、normalizer safetensors及receipt、Tokenizer文件和receipt。缺失时STOP，不会自动下载任何缺失项或加载/更新网络模型。无法通过ModelProcessor的计算不允许标记模型已训练。
